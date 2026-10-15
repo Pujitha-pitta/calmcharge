@@ -15,8 +15,7 @@ def test_validates_contiguous_utc_hourly_table():
     index = pd.date_range("2026-03-28T00:00Z", periods=48, freq="h", name="timestamp")
     table = assemble_table(*_sources(index))
     assert len(table) == 48
-    assert table.index.tz is not None
-    assert table.index.tz.zone == "UTC" if hasattr(table.index.tz, "zone") else str(table.index.tz) == "UTC"
+    assert str(table.index.tz) == "UTC"
     assert table["is_holiday"].dtype == bool
 
 
