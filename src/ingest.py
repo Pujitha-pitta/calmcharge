@@ -55,7 +55,6 @@ def _download_eds_dataset(
                 "start": start.strftime("%Y-%m-%dT%H:%M"),
                 "end": end.strftime("%Y-%m-%dT%H:%M"),
                 "filter": json.dumps({"PriceArea": ["SE4"]}),
-                "sort": "HourUTC asc",
                 "limit": 10_000,
                 "offset": offset,
             },
@@ -91,7 +90,7 @@ def fetch_se4_prices(start: str, end: str) -> pd.DataFrame:
     time_col = _first_present(raw, ("HourUTC", "TimeUTC", "MinutesUTC"))
     price_col = _first_present(
         raw,
-        ("SpotPriceEUR", "DayAheadPriceEUR", "SpotPriceDKK", "DayAheadPriceDKK"),
+        ("SpotPriceEUR", "DayAheadPriceEUR"),
     )
     if "PriceArea" in raw:
         raw = raw.loc[raw["PriceArea"].eq("SE4")].copy()
