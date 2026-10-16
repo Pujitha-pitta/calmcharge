@@ -218,7 +218,7 @@ def fetch_smhi_observations(
     expected = pd.date_range(
         start.ceil("h"), end.ceil("h"), freq="h", inclusive="left", name="timestamp"
     )
-    combined = pd.DataFrame(index=expected)
+    combined = pd.DataFrame({column: pd.Series(index=expected, dtype=float)}, index=expected)
     for station in stations:
         pieces = []
         for period in station["_period_keys"]:
