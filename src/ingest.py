@@ -19,7 +19,7 @@ import requests
 
 EDS_URL = "https://api.energidataservice.dk/dataset"
 SMHI_URL = "https://opendata-download-metobs.smhi.se/api/version/latest"
-PRICE_CUTOVER = pd.Timestamp("2025-10-01T00:00:00Z")
+PRICE_CUTOVER = pd.Timestamp("2025-09-30T22:00:00Z")
 MALMO_LAT, MALMO_LON = 55.6050, 13.0038
 DATA_PATH = Path("data/processed/se4_hourly.parquet")
 SESSION = requests.Session()
