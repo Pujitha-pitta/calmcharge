@@ -62,15 +62,15 @@ def test_station_lookup_uses_station_detail_to_find_archive(monkeypatch):
     responses = {
         f"{module.SMHI_URL}/parameter/1.json": {
             "station": [
-                {"key": "near", "name": "Malmö 2", "latitude": 55.60, "longitude": 13.00},
-                {"key": "archive", "name": "Lund", "latitude": 55.70, "longitude": 13.20},
+                {"key": "near", "name": "Malmö 2", "latitude": 55.60, "longitude": 13.00, "active": false},
+                {"key": "archive", "name": "Lund", "latitude": 55.70, "longitude": 13.20, "active": true},
             ]
         },
         f"{module.SMHI_URL}/parameter/1/station/near.json": {
             "period": [{"key": "latest-hour"}]
         },
         f"{module.SMHI_URL}/parameter/1/station/archive.json": {
-            "period": [{"key": "corrected-archive"}]
+            "period": [{"key": "corrected-archive"}, {"key": "latest-months"}]
         },
     }
     monkeypatch.setattr(module, "_get_json", lambda url, params=None: responses[url])
@@ -78,7 +78,7 @@ def test_station_lookup_uses_station_detail_to_find_archive(monkeypatch):
     station = module.find_nearest_station(1)
 
     assert station["key"] == "archive"
-    assert station["_period_key"] == "corrected-archive"
+    assert station["_period_keys"] == ["corrected-archive", "latest-months"]
 
 
 def test_smhi_csv_parser_tolerates_extra_semicolon_field(monkeypatch):
@@ -97,7 +97,7 @@ def test_smhi_csv_parser_tolerates_extra_semicolon_field(monkeypatch):
     monkeypatch.setattr(
         module,
         "find_nearest_station",
-        lambda parameter: {"key": "test", "name": "test", "_period_key": "corrected-archive"},
+        lambda parameter: {"key": "test", "name": "test", "_period_keys": ["corrected-archive"]},
     )
     monkeypatch.setattr(module.SESSION, "get", lambda *args, **kwargs: FakeResponse())
 
