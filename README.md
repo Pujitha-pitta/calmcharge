@@ -1,6 +1,6 @@
 # CalmCharge
 
-An electricity-price analytics and EV charging project for Sweden's SE4 region. The project ingests public price and weather data, explores price patterns, evaluates forecasting methods, and plans EV charging around public day-ahead prices.
+I built CalmCharge as a hands-on project to follow electricity-price data from download through analysis and into a charging plan. It uses public data for Sweden's SE4 region. I don't have a vehicle, so the EV in the planner is a simulation with example battery settings.
 
 ## Progress
 
@@ -38,6 +38,19 @@ The expanding-window validation then trained on progressively longer histories a
 | 3 | 2026-08-03 16:00 to 2026-10-14 23:00 | 17.72 / 28.29 |
 
 Combined across the 5,206 validation hours, the ridge model scored **MAE 14.41** and **RMSE 22.50 EUR/MWh**. The baselines scored MAE 40.10 (yesterday), 41.06 (previous seven-day same-hour average), and 48.14 (last week). The ridge model led on both combined metrics in all three folds. Scores worsen in the latest fold, so this result is evidence for this dataset and period, not a guarantee of future performance.
+
+## What I learned
+
+The most useful part of this project was seeing how much care a time-series project needs before modeling: prices arrive in different market formats, source timestamps use Denmark's local time, and the finished schedules need to make sense in Sweden's local time. I store the data in UTC and convert it for display.
+
+I also compared the ridge model with simple price-history baselines and used expanding-window validation so each evaluation fold only learns from earlier data. On this dataset, the model beat those baselines, but the latest fold scored worse than the earlier ones. That is a good reason to treat the result as an experiment, not a promise about future prices.
+
+## What I would improve next
+
+- Try a true day-ahead forecast using only information that would have been available when the forecast was made.
+- Add archived weather forecasts instead of relying on historical weather observations.
+- Check the cost calculation against a real electricity tariff before presenting it as a household-cost estimate.
+- Test the planner with more dates and edge cases, including daylight-saving-time changes.
 
 ## Explore the data and run the models
 
