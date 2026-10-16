@@ -7,6 +7,8 @@ import csv
 import io
 import json
 import math
+import re
+import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -25,9 +27,35 @@ SESSION.headers.update({"User-Agent": "CalmCharge/0.1 (open educational project)
 
 
 def _get_json(url: str, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
-    response = SESSION.get(url, params=params, timeout=60)
-    response.raise_for_status()
-    return response.json()
+    """Fetch JSON and honor Energi Data Service rate-limit responses."""
+    for attempt in range(6):
+        response = SESSION.get(url, params=params, timeout=60)
+        if response.status_code != 429:
+            response.raise_for_status()
+            return response.json()
+
+        retry_after = response.headers.get("Retry-After")
+        if retry_after:
+            try:
+                wait_seconds = float(retry_after)
+            except ValueError:
+                wait_seconds = min(30 * (2**attempt), 300)
+        else:
+            try:
+                message = json.dumps(response.json())
+            except ValueError:
+                message = response.text
+            match = re.search(r"(?:in|after)\\s+(\\d+(?:\\.\\d+)?)\\s*seconds?", message, re.I)
+            wait_seconds = (
+                float(match.group(1))
+                if match
+                else min(30 * (2**attempt), 300)
+            )
+        if attempt == 5:
+            response.raise_for_status()
+        time.sleep(max(wait_seconds, 1))
+
+    raise RuntimeError("Energi Data Service remained rate-limited after retries")
 
 
 def _as_utc(value: str | pd.Timestamp) -> pd.Timestamp:
