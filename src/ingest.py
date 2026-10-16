@@ -121,12 +121,14 @@ def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 
 def find_nearest_station(parameter: int) -> dict[str, Any]:
-    """Return the nearest station with a usable observation archive."""
+    """Return the nearest active station with recent observations."""
     metadata = _get_json(f"{SMHI_URL}/parameter/{parameter}.json")
     candidates = [
         station
         for station in metadata.get("station", [])
-        if station.get("latitude") is not None and station.get("longitude") is not None
+        if station.get("active") is True
+        and station.get("latitude") is not None
+        and station.get("longitude") is not None
     ]
     candidates.sort(
         key=lambda station: _haversine_km(
@@ -140,49 +142,35 @@ def find_nearest_station(parameter: int) -> dict[str, Any]:
         detail = _get_json(
             f"{SMHI_URL}/parameter/{parameter}/station/{station['key']}.json"
         )
-        period_keys = {item.get("key") for item in detail.get("period", [])}
-        period = next(
-            (key for key in ("corrected-archive", "latest-months") if key in period_keys),
-            None,
-        )
-        if period:
-            return {**station, "_period_key": period}
+        available = {item.get("key") for item in detail.get("period", [])}
+        # The archive contains older observations; latest-months fills the
+        # recent tail. Download both when available, then merge by timestamp.
+        periods = [
+            key for key in ("corrected-archive", "latest-months") if key in available
+        ]
+        if periods:
+            return {**station, "_period_keys": periods}
     raise ValueError(
-        f"No SMHI station has a corrected archive or latest-months period "
+        f"No active SMHI station has a corrected archive or latest-months period "
         f"for parameter {parameter}"
     )
 
 
-def fetch_smhi_observations(
-    parameter: int, column: str, start: pd.Timestamp, end: pd.Timestamp
-) -> pd.DataFrame:
-    """Fetch parameter 1 (temperature) or 4 (wind speed) from a nearby SMHI station."""
-    station = find_nearest_station(parameter)
-    period = station["_period_key"]
-    url = (
-        f"{SMHI_URL}/parameter/{parameter}/station/{station['key']}"
-        f"/period/{period}/data.csv"
-    )
-    response = SESSION.get(url, timeout=120)
-    response.raise_for_status()
-    rows = list(csv.reader(io.StringIO(response.text), delimiter=";"))
+def _parse_smhi_csv(text: str, station_name: str, column: str) -> pd.DataFrame:
+    rows = list(csv.reader(io.StringIO(text), delimiter=";"))
     header_index = next(
         (
             index
             for index, row in enumerate(rows)
             if len(row) >= 3
             and row[0].strip().lstrip("\ufeff").lower() in ("datum", "date")
-            and (
-                "tid" in row[1].strip().lower()
-                or row[1].strip().lower() == "time"
-            )
+            and ("tid" in row[1].strip().lower() or row[1].strip().lower() == "time")
         ),
         None,
     )
     if header_index is None:
-        raise ValueError(f"Could not find the date/time header in SMHI data for {station.get('name')}")
+        raise ValueError(f"Could not find the date/time header in SMHI data for {station_name}")
     header = [item.strip() for item in rows[header_index]]
-    date_index, time_index = 0, 1
     value_index = next(
         (
             index
@@ -192,15 +180,14 @@ def fetch_smhi_observations(
         None,
     )
     if value_index is None:
-        raise ValueError(f"SMHI response for {station.get('name')} has no value column")
+        raise ValueError(f"SMHI response for {station_name} has no value column")
     parsed_rows = [
-        (row[date_index], row[time_index], row[value_index])
+        (row[0], row[1], row[value_index])
         for row in rows[header_index + 1 :]
-        if len(row) > value_index and row[date_index].strip()
+        if len(row) > value_index and row[0].strip()
     ]
     raw = pd.DataFrame(parsed_rows, columns=["date", "time", "value"])
-
-    local = pd.to_datetime(
+    timestamps = pd.to_datetime(
         raw["date"].astype(str).str.strip()
         + " "
         + raw["time"].astype(str).str.strip(),
@@ -209,13 +196,30 @@ def fetch_smhi_observations(
         errors="coerce",
     )
     values = pd.to_numeric(raw["value"], errors="coerce")
-    series = pd.Series(values.to_numpy(), index=local, name=column).dropna()
+    series = pd.Series(values.to_numpy(), index=timestamps, name=column).dropna()
     series.index.name = "timestamp"
     series = series.loc[~series.index.isna()]
     series = series[~series.index.duplicated(keep="last")].sort_index()
-    series = series.resample("h").mean()
-    return series.loc[(series.index >= start) & (series.index < end)].to_frame()
+    return series.resample("h").mean().to_frame()
 
+
+def fetch_smhi_observations(
+    parameter: int, column: str, start: pd.Timestamp, end: pd.Timestamp
+) -> pd.DataFrame:
+    """Fetch parameter 1 (temperature) or 4 (wind speed) from an active SMHI station."""
+    station = find_nearest_station(parameter)
+    pieces = []
+    for period in station["_period_keys"]:
+        url = (
+            f"{SMHI_URL}/parameter/{parameter}/station/{station['key']}"
+            f"/period/{period}/data.csv"
+        )
+        response = SESSION.get(url, timeout=120)
+        response.raise_for_status()
+        pieces.append(_parse_smhi_csv(response.text, station.get("name", str(station["key"])), column))
+    combined = pd.concat(pieces).sort_index()
+    combined = combined[~combined.index.duplicated(keep="last")]
+    return combined.loc[(combined.index >= start) & (combined.index < end)]
 
 def add_calendar_features(frame: pd.DataFrame) -> pd.DataFrame:
     result = frame.copy()
