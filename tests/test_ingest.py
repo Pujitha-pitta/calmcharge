@@ -130,3 +130,33 @@ def test_eds_query_bounds_are_converted_from_utc_to_danish_time(monkeypatch):
 
     assert captured["params"]["start"] == "2025-10-01T02:00"
     assert captured["params"]["end"] == "2025-10-02T02:00"
+
+
+
+def test_get_json_waits_and_retries_after_rate_limit(monkeypatch):
+    from src import ingest as module
+
+    class FakeResponse:
+        def __init__(self, status_code, payload, headers=None):
+            self.status_code = status_code
+            self._payload = payload
+            self.headers = headers or {}
+            self.text = ""
+
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                raise RuntimeError("HTTP error")
+
+        def json(self):
+            return self._payload
+
+    responses = [
+        FakeResponse(429, {"message": "rate limited"}, {"Retry-After": "3"}),
+        FakeResponse(200, {"records": [1]}),
+    ]
+    waits = []
+    monkeypatch.setattr(module.SESSION, "get", lambda *args, **kwargs: responses.pop(0))
+    monkeypatch.setattr(module.time, "sleep", waits.append)
+
+    assert module._get_json("https://example.test") == {"records": [1]}
+    assert waits == [3.0]
