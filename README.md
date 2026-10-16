@@ -13,7 +13,8 @@ An electricity-price analytics and EV charging project for Sweden's SE4 region. 
 - [x] Expanding-window time-series validation
 - [x] Cheapest-hour charging planner using historical prices
 - [x] Fetch published SE4 day-ahead prices for an upcoming schedule
-- [ ] Add household tariff costs and vehicle-specific charge limits
+- [x] Account for user-provided battery state and variable tariff inputs
+- [ ] Validate the cost estimate against an actual electricity bill
 
 ## Forecasting experiment
 
@@ -63,17 +64,31 @@ Choose a date and an available charging window from your downloaded dataset. Exa
 .\.venv\Scripts\python.exe -m src.plan_charge --date 2026-10-14 --start-hour 18 --end-hour 23 --energy-kwh 10 --charger-kw 7.2 --efficiency 0.90
 ```
 
-The planner selects the cheapest hours, with a partial final slot when needed. It converts EUR/MWh to a market-energy cost estimate in EUR. This is a historical demonstration, not a live recommendation.
+This historical demo selects the cheapest hours in the window and estimates market-energy cost. It does not make a live recommendation.
 
 ## Upcoming day-ahead charging plan
 
-The live planner requests current SE4 day-ahead prices from Energi Data Service. By default, it tries tomorrow's date in Sweden time. The market may not have published prices yet; if so, wait and run the command again later.
+The live planner requests published SE4 day-ahead prices from Energi Data Service. By default, it tries tomorrow's date in Sweden time. If the market has not published prices yet, wait and run the command again later.
+
+The basic market-only command is:
 
 ```powershell
 .\.venv\Scripts\python.exe -m src.plan_live_charge --start-hour 18 --end-hour 23 --energy-kwh 10 --charger-kw 7.2 --efficiency 0.90
 ```
 
-To select a specific local date, add `--date YYYY-MM-DD`. The planner chooses the cheapest hours in the window and prints the estimated **market-energy** cost. It does not include household taxes, network fees, supplier charges, or vehicle-specific charge limits. Check the schedule against your car and charger before using it. The API's request times use Danish local time; the project converts them to UTC and displays the schedule in Swedish local time.
+You can replace `--energy-kwh` with battery state inputs. The planner calculates the battery energy needed from the capacity and state-of-charge change:
+
+```text
+--battery-capacity-kwh <usable battery capacity>
+--current-soc <current percent>
+--target-soc <desired percent>
+```
+
+Use `--charger-kw` for the lower of the vehicle's onboard AC charging limit and the charger's power limit. Set `--efficiency` from a measured value if available; otherwise its default is an estimate.
+
+Optional variable tariff inputs are `--retail-adder-sek-kwh`, `--grid-fee-sek-kwh`, and `--energy-tax-sek-kwh`. Provide `--sek-per-eur` to convert the spot price, and `--vat-percent` for the VAT assumption. Enter values from your own contract and confirm how VAT applies to your bill. If tariff inputs are omitted, the result is market-energy only. Fixed monthly charges are excluded because they do not change which hours are cheapest.
+
+The planner chooses the cheapest hours in the window. The estimate does not replace your electricity bill; check the schedule against your car, charger, and contract before using it. API request timestamps use Danish local time; the project converts them to UTC and displays the schedule in Swedish local time.
 
 ## Build the initial table
 
@@ -94,7 +109,7 @@ The end date is exclusive. The ingestion command writes `data/processed/se4_hour
 
 All stored timestamps are timezone-aware UTC. Charts and charging plans display Sweden's local time. The first model uses calendar fields and earlier observed prices; it does not use observed future weather, which would leak information unavailable at forecast time.
 
-SMHI weather observations are historical analysis inputs. A realistic weather-based day-ahead model needs archived weather forecasts as issued at the forecast cutoff. Market prices are EUR/MWh and do not include household fees or taxes; use your actual electricity contract details before treating the estimate as a household bill.
+SMHI weather observations are historical analysis inputs. A realistic weather-based day-ahead model needs archived weather forecasts as issued at the forecast cutoff. Market prices are EUR/MWh and do not include household fees or taxes unless you provide variable tariff inputs; verify those inputs against your own electricity contract.
 
 ## Data sources
 
@@ -111,7 +126,7 @@ src/evaluate_baselines.py     Chronological baseline metrics
 src/train_model.py            One-hour-ahead ridge-regression model
 src/validate_model.py         Expanding-window time-series evaluation
 src/plan_charge.py            Cheapest-hour historical charging demo
-src/plan_live_charge.py       Upcoming-day plan from published market prices
+src/plan_live_charge.py       Upcoming-day plan, vehicle SoC, tariff inputs
 tests/                        Data cleaning and UTC-grid tests
 data/raw/                     Downloaded source files (gitignored)
 data/processed/               Generated parquet tables (gitignored)
