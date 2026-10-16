@@ -80,6 +80,18 @@ The planner derives the requested energy from the battery capacity and state-of-
 
 The API request timestamps use Danish local time; the project converts them to UTC and displays the schedule in Swedish local time.
 
+## Local web dashboard
+
+Start a small dashboard on your computer using the same live planner and simulated EV defaults:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.dashboard
+```
+
+Leave that PowerShell window open, then visit [http://127.0.0.1:8765](http://127.0.0.1:8765) in your browser. Choose a date, charging window, and simulated battery settings, then select **Find cheapest hours**. The dashboard requests published SE4 day-ahead prices, so a date may be unavailable until prices are published.
+
+Stop the dashboard with **Ctrl+C** in its PowerShell window. It runs only on your computer and does not connect to or control a vehicle or charger. Cost results are estimates based on the entered assumptions; fixed charges are excluded.
+
 ## Build the initial table
 
 Requires Python 3.11 or newer.
@@ -117,6 +129,7 @@ src/train_model.py            One-hour-ahead ridge-regression model
 src/validate_model.py         Expanding-window time-series evaluation
 src/plan_charge.py            Cheapest-hour historical charging demo
 src/plan_live_charge.py       Live plan with simulated EV and tariff inputs
+src/dashboard.py              Local web dashboard for the simulated live planner
 tests/                        Data cleaning and UTC-grid tests
 data/raw/                     Downloaded source files (gitignored)
 data/processed/               Generated parquet tables (gitignored)
