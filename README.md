@@ -11,9 +11,10 @@ An electricity-price analytics and EV charging project for Sweden's SE4 region. 
 - [x] Exploratory charts by hour, weekday, and month
 - [x] Baseline comparisons and first ridge-regression model
 - [x] Expanding-window time-series validation
-- [ ] Build a practical charging recommendation and cost model
+- [x] Cheapest-hour charging planner using historical prices
+- [ ] Connect the planner to verified future day-ahead prices and household tariff costs
 
-## Current experiment
+## Forecasting experiment
 
 The local dataset used for these results contains 17,520 hourly observations from 2024-10-15 through 2026-10-14. Each prediction is one hour ahead and uses earlier observed prices. This is not yet a day-ahead forecast.
 
@@ -53,7 +54,15 @@ The exploration script prints summary statistics and saves three local charts un
 - `average_by_weekday.png`
 - `average_by_month.png`
 
-The validation script uses expanding training windows and later, unseen timestamps for evaluation. The charts and parquet data are generated locally and are not committed to the repository.
+## Historical charging-plan demo
+
+Choose a date and an available charging window from your downloaded dataset. Example: request 10 kWh into the battery between 18:00 and 23:00 on October 14, 2026, with a 7.2 kW charger and 90% efficiency:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.plan_charge --date 2026-10-14 --start-hour 18 --end-hour 23 --energy-kwh 10 --charger-kw 7.2 --efficiency 0.90
+```
+
+The planner selects the cheapest whole-hour slots, with a partial final slot when needed. It converts EUR/MWh to a market-energy cost estimate in EUR. The result excludes taxes, network fees, supplier charges, and other household tariff components. It uses historical prices for a demonstration; it does not make a live recommendation for a future day. Use a date and window covered by your local parquet dataset.
 
 ## Build the initial table
 
@@ -72,9 +81,9 @@ The end date is exclusive. The ingestion command writes `data/processed/se4_hour
 
 ## Time, features, and data limitations
 
-All stored timestamps are timezone-aware UTC. The charts group calendar patterns using Sweden's local time. The first model uses calendar fields and earlier observed prices. It does not use observed future weather, which would leak information unavailable at forecast time.
+All stored timestamps are timezone-aware UTC. The charts and charging planner display Sweden's local time. The first model uses calendar fields and earlier observed prices. It does not use observed future weather, which would leak information unavailable at forecast time.
 
-SMHI weather observations are historical analysis inputs. A realistic day-ahead weather model needs archived weather forecasts as issued at the forecast cutoff. Prices are energy-only EUR/MWh and do not include household taxes, network charges, supplier margins, charger efficiency, or SEK conversion. These need to be explicit inputs in a later EV charging cost model.
+SMHI weather observations are historical analysis inputs. A realistic day-ahead weather model needs archived weather forecasts as issued at the forecast cutoff. Prices are energy-only EUR/MWh and do not include household taxes, network charges, supplier margins, charger efficiency, or SEK conversion. These need to be explicit inputs in a later live EV charging cost model.
 
 ## Data sources
 
@@ -89,6 +98,7 @@ src/explore.py                Summary statistics and exploratory charts
 src/evaluate_baselines.py     Chronological baseline metrics
 src/train_model.py            One-hour-ahead ridge-regression model
 src/validate_model.py         Expanding-window time-series evaluation
+src/plan_charge.py            Cheapest-hour historical charging demo
 tests/                        Data cleaning and UTC-grid tests
 data/raw/                     Downloaded source files (gitignored)
 data/processed/               Generated parquet tables (gitignored)
