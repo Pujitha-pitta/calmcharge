@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import io
 import json
 import math
@@ -164,25 +165,51 @@ def fetch_smhi_observations(
     )
     response = SESSION.get(url, timeout=120)
     response.raise_for_status()
-    raw = pd.read_csv(io.StringIO(response.text), sep=";", comment="#")
-    date_col = _first_present(raw, ("Datum", "date", "Date"))
-    time_col = _first_present(raw, ("Tid (UTC)", "Tid", "time", "Time"))
-    value_col = next(
-        (name for name in raw.columns if name not in (date_col, time_col)),
+    rows = list(csv.reader(io.StringIO(response.text), delimiter=";"))
+    header_index = next(
+        (
+            index
+            for index, row in enumerate(rows)
+            if len(row) >= 3
+            and row[0].strip().lstrip("\\ufeff").lower() in ("datum", "date")
+            and "tid" in row[1].strip().lower() or (
+                len(row) >= 3
+                and row[0].strip().lstrip("\\ufeff").lower() in ("datum", "date")
+                and row[1].strip().lower() == "time"
+            )
+        ),
         None,
     )
-    if value_col is None:
+    if header_index is None:
+        raise ValueError(f"Could not find the date/time header in SMHI data for {station.get('name')}")
+    header = [item.strip() for item in rows[header_index]]
+    date_index, time_index = 0, 1
+    value_index = next(
+        (
+            index
+            for index, name in enumerate(header[2:], start=2)
+            if "kvalitet" not in name.lower() and name.strip()
+        ),
+        None,
+    )
+    if value_index is None:
         raise ValueError(f"SMHI response for {station.get('name')} has no value column")
+    parsed_rows = [
+        (row[date_index], row[time_index], row[value_index])
+        for row in rows[header_index + 1 :]
+        if len(row) > value_index and row[date_index].strip()
+    ]
+    raw = pd.DataFrame(parsed_rows, columns=["date", "time", "value"])
 
     local = pd.to_datetime(
-        raw[date_col].astype(str).str.strip()
+        raw["date"].astype(str).str.strip()
         + " "
-        + raw[time_col].astype(str).str.strip(),
+        + raw["time"].astype(str).str.strip(),
         format="mixed",
         utc=True,
         errors="coerce",
     )
-    values = pd.to_numeric(raw[value_col], errors="coerce")
+    values = pd.to_numeric(raw["value"], errors="coerce")
     series = pd.Series(values.to_numpy(), index=local, name=column).dropna()
     series.index.name = "timestamp"
     series = series.loc[~series.index.isna()]
