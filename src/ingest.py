@@ -53,8 +53,8 @@ def _download_eds_dataset(
         payload = _get_json(
             f"{EDS_URL}/{dataset}",
             params={
-                "start": start.strftime("%Y-%m-%dT%H:%M"),
-                "end": end.strftime("%Y-%m-%dT%H:%M"),
+                "start": start.tz_convert("Europe/Copenhagen").strftime("%Y-%m-%dT%H:%M"),
+                "end": end.tz_convert("Europe/Copenhagen").strftime("%Y-%m-%dT%H:%M"),
                 "filter": json.dumps({"PriceArea": ["SE4"]}),
                 "limit": 10_000,
                 "offset": offset,
