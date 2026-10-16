@@ -1,13 +1,13 @@
 """Plan EV charging with published SE4 day-ahead market prices.
 
-The EDS API timestamps its request range in Danish local time. The shared
-ingestion function handles that conversion and averages 15-minute prices to
-hourly values for this planner.
+The Energi Data Service API timestamps its request range in Danish local time.
+The shared ingestion function handles that conversion and averages 15-minute
+prices to hourly values for this planner.
 """
 
 import argparse
+import math
 from datetime import date, datetime, timedelta
-from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -16,7 +16,6 @@ from src.ingest import fetch_se4_prices
 
 
 LOCAL_TIMEZONE = "Europe/Stockholm"
-DATA_PATH = Path("data/processed/se4_hourly.parquet")
 
 
 def parse_args() -> argparse.Namespace:
@@ -62,11 +61,19 @@ def main() -> None:
     end_utc = local_end.tz_convert("UTC")
 
     print(f"Fetching published SE4 day-ahead prices for {target_date}...")
-    prices = fetch_se4_prices(start_utc, end_utc)
+    try:
+        prices = fetch_se4_prices(start_utc, end_utc)
+    except ValueError as exc:
+        if "returned no SE4 price records" in str(exc):
+            raise ValueError(
+                "No day-ahead prices are published for that date yet. Try again "
+                "after the market publishes prices, or select another date."
+            ) from exc
+        raise
     if prices.empty:
         raise ValueError(
             "No day-ahead prices are published for that date yet. Try again after "
-            "the market publishes prices, or select a date with available prices."
+            "the market publishes prices, or select another date."
         )
 
     prices.index = prices.index.tz_convert(LOCAL_TIMEZONE)
@@ -84,7 +91,7 @@ def main() -> None:
         )
 
     battery_per_hour = args.charger_kw * args.efficiency
-    needed_hours = -(-int(round(args.energy_kwh * 1_000_000)) // int(round(battery_per_hour * 1_000_000)))
+    needed_hours = math.ceil(args.energy_kwh / battery_per_hour)
     if needed_hours > len(window):
         max_energy = len(window) * battery_per_hour
         raise ValueError(
@@ -109,7 +116,7 @@ def main() -> None:
     )
     selected = selected.sort_index()
 
-    print(f"Published price slots received: {len(prices)}")
+    print(f"Published hourly price slots received: {len(prices)}")
     print(f"Plan for {target_date} ({LOCAL_TIMEZONE}), {args.start_hour:02d}:00–{args.end_hour:02d}:00")
     print(
         f"Target: {args.energy_kwh:.2f} kWh into battery | Charger: {args.charger_kw:.2f} kW | "
