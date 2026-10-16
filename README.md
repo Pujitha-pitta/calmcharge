@@ -13,7 +13,7 @@ An electricity-price analytics and EV charging project for Sweden's SE4 region. 
 - [x] Expanding-window time-series validation
 - [x] Cheapest-hour charging planner using historical prices
 - [x] Fetch published SE4 day-ahead prices for an upcoming schedule
-- [x] Account for user-provided battery state and variable tariff inputs
+- [x] Account for configurable battery state and variable tariff inputs
 - [ ] Validate the cost estimate against an actual electricity bill
 
 ## Forecasting experiment
@@ -70,25 +70,15 @@ This historical demo selects the cheapest hours in the window and estimates mark
 
 The live planner requests published SE4 day-ahead prices from Energi Data Service. By default, it tries tomorrow's date in Sweden time. If the market has not published prices yet, wait and run the command again later.
 
-The basic market-only command is:
+No real car is needed for the project: use an explicitly labeled simulated EV profile. For example, the following assumes a 60 kWh usable battery, charging from 30% to 50%, a 7.2 kW AC limit, and 90% efficiency. These are example settings, not specifications for a particular vehicle:
 
 ```powershell
-.\.venv\Scripts\python.exe -m src.plan_live_charge --start-hour 18 --end-hour 23 --energy-kwh 10 --charger-kw 7.2 --efficiency 0.90
+.\.venv\Scripts\python.exe -m src.plan_live_charge --start-hour 18 --end-hour 23 --battery-capacity-kwh 60 --current-soc 30 --target-soc 50 --charger-kw 7.2 --efficiency 0.90
 ```
 
-You can replace `--energy-kwh` with battery state inputs. The planner calculates the battery energy needed from the capacity and state-of-charge change:
+The planner derives the requested energy from the battery capacity and state-of-charge change, then selects the cheapest hours. It reports a market-energy estimate in EUR. Optional variable tariff inputs are `--retail-adder-sek-kwh`, `--grid-fee-sek-kwh`, and `--energy-tax-sek-kwh`. To include them, provide the corresponding SEK/kWh values from a sample contract, plus `--sek-per-eur` and `--vat-percent`. Clearly label assumed values in project reports. Fixed monthly charges are excluded. Verify taxes and fees against the applicable contract before treating the estimate as a household bill.
 
-```text
---battery-capacity-kwh <usable battery capacity>
---current-soc <current percent>
---target-soc <desired percent>
-```
-
-Use `--charger-kw` for the lower of the vehicle's onboard AC charging limit and the charger's power limit. Set `--efficiency` from a measured value if available; otherwise its default is an estimate.
-
-Optional variable tariff inputs are `--retail-adder-sek-kwh`, `--grid-fee-sek-kwh`, and `--energy-tax-sek-kwh`. Provide `--sek-per-eur` to convert the spot price, and `--vat-percent` for the VAT assumption. Enter values from your own contract and confirm how VAT applies to your bill. If tariff inputs are omitted, the result is market-energy only. Fixed monthly charges are excluded because they do not change which hours are cheapest.
-
-The planner chooses the cheapest hours in the window. The estimate does not replace your electricity bill; check the schedule against your car, charger, and contract before using it. API request timestamps use Danish local time; the project converts them to UTC and displays the schedule in Swedish local time.
+The API request timestamps use Danish local time; the project converts them to UTC and displays the schedule in Swedish local time.
 
 ## Build the initial table
 
@@ -126,7 +116,7 @@ src/evaluate_baselines.py     Chronological baseline metrics
 src/train_model.py            One-hour-ahead ridge-regression model
 src/validate_model.py         Expanding-window time-series evaluation
 src/plan_charge.py            Cheapest-hour historical charging demo
-src/plan_live_charge.py       Upcoming-day plan, vehicle SoC, tariff inputs
+src/plan_live_charge.py       Live plan with simulated EV and tariff inputs
 tests/                        Data cleaning and UTC-grid tests
 data/raw/                     Downloaded source files (gitignored)
 data/processed/               Generated parquet tables (gitignored)
