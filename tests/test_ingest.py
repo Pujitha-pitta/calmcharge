@@ -54,3 +54,28 @@ def test_resampling_fifteen_minute_prices_averages_to_hour(monkeypatch):
     result = module.fetch_se4_prices("2026-01-01", "2026-01-02")
     assert result.iloc[0, 0] == 25
     assert len(result) == 1
+
+
+def test_station_lookup_uses_station_detail_to_find_archive(monkeypatch):
+    from src import ingest as module
+
+    responses = {
+        f"{module.SMHI_URL}/parameter/1.json": {
+            "station": [
+                {"key": "near", "name": "Malmö 2", "latitude": 55.60, "longitude": 13.00},
+                {"key": "archive", "name": "Lund", "latitude": 55.70, "longitude": 13.20},
+            ]
+        },
+        f"{module.SMHI_URL}/parameter/1/station/near.json": {
+            "period": [{"key": "latest-hour"}]
+        },
+        f"{module.SMHI_URL}/parameter/1/station/archive.json": {
+            "period": [{"key": "corrected-archive"}]
+        },
+    }
+    monkeypatch.setattr(module, "_get_json", lambda url, params=None: responses[url])
+
+    station = module.find_nearest_station(1)
+
+    assert station["key"] == "archive"
+    assert station["_period_key"] == "corrected-archive"
