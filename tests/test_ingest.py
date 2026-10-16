@@ -160,3 +160,35 @@ def test_get_json_waits_and_retries_after_rate_limit(monkeypatch):
 
     assert module._get_json("https://example.test") == {"records": [1]}
     assert waits == [3.0]
+
+
+
+def test_combines_legacy_and_new_price_timestamp_columns(monkeypatch):
+    from src import ingest as module
+
+    old = pd.DataFrame(
+        {
+            "HourUTC": ["2025-09-30T23:00:00"],
+            "PriceArea": ["SE4"],
+            "SpotPriceEUR": [40.0],
+        }
+    )
+    new = pd.DataFrame(
+        {
+            "TimeUTC": ["2025-10-01T00:00:00"],
+            "PriceArea": ["SE4"],
+            "DayAheadPriceEUR": [60.0],
+        }
+    )
+
+    def fake_download(dataset, start, end):
+        return old if dataset == "Elspotprices" else new
+
+    monkeypatch.setattr(module, "_download_eds_dataset", fake_download)
+    result = module.fetch_se4_prices(
+        "2025-09-30T23:00Z", "2025-10-01T01:00Z"
+    )
+
+    assert list(result["price_eur_mwh"]) == [40.0, 60.0]
+    assert result.index[0] == pd.Timestamp("2025-09-30T23:00Z")
+    assert result.index[-1] == pd.Timestamp("2025-10-01T00:00Z")
