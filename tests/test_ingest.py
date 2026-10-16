@@ -109,3 +109,24 @@ def test_smhi_csv_parser_tolerates_extra_semicolon_field(monkeypatch):
     )
 
     assert result.iloc[0, 0] == pytest.approx(8.5)
+
+
+
+def test_eds_query_bounds_are_converted_from_utc_to_danish_time(monkeypatch):
+    from src import ingest as module
+
+    captured = {}
+
+    def fake_get_json(url, params=None):
+        captured["params"] = params
+        return {"records": []}
+
+    monkeypatch.setattr(module, "_get_json", fake_get_json)
+    module._download_eds_dataset(
+        "DayAheadPrices",
+        pd.Timestamp("2025-10-01T00:00Z"),
+        pd.Timestamp("2025-10-02T00:00Z"),
+    )
+
+    assert captured["params"]["start"] == "2025-10-01T02:00"
+    assert captured["params"]["end"] == "2025-10-02T02:00"
