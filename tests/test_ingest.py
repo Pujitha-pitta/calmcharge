@@ -96,8 +96,8 @@ def test_smhi_csv_parser_tolerates_extra_semicolon_field(monkeypatch):
 
     monkeypatch.setattr(
         module,
-        "find_nearest_station",
-        lambda parameter: {"key": "test", "name": "test", "_period_keys": ["corrected-archive"]},
+        "find_active_stations",
+        lambda parameter: [{"key": "test", "name": "test", "_period_keys": ["corrected-archive"]}],
     )
     monkeypatch.setattr(module.SESSION, "get", lambda *args, **kwargs: FakeResponse())
 
