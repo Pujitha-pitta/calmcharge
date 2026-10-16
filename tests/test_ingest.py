@@ -124,7 +124,7 @@ def test_eds_query_bounds_are_converted_from_utc_to_danish_time(monkeypatch):
     monkeypatch.setattr(module, "_get_json", fake_get_json)
     module._download_eds_dataset(
         "DayAheadPrices",
-        pd.Timestamp("2025-09-30T22:00Z"),
+        pd.Timestamp("2025-10-01T00:00Z"),
         pd.Timestamp("2025-10-02T00:00Z"),
     )
 
@@ -191,4 +191,4 @@ def test_combines_legacy_and_new_price_timestamp_columns(monkeypatch):
 
     assert list(result["price_eur_mwh"]) == [40.0, 60.0]
     assert result.index[0] == pd.Timestamp("2025-09-30T21:00Z")
-    assert result.index[-1] == pd.Timestamp("2025-10-01T00:00Z")
+    assert result.index[-1] == pd.Timestamp("2025-09-30T22:00Z")
