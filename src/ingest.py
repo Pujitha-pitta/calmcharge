@@ -45,7 +45,7 @@ def _get_json(url: str, *, params: dict[str, Any] | None = None) -> dict[str, An
                 message = json.dumps(response.json())
             except ValueError:
                 message = response.text
-            match = re.search(r"(?:in|after)\\s+(\\d+(?:\\.\\d+)?)\\s*seconds?", message, re.I)
+            match = re.search(r"(?:in|after)\s+(\d+(?:\.\d+)?)\s*seconds?", message, re.I)
             wait_seconds = (
                 float(match.group(1))
                 if match
