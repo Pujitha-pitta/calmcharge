@@ -79,3 +79,33 @@ def test_station_lookup_uses_station_detail_to_find_archive(monkeypatch):
 
     assert station["key"] == "archive"
     assert station["_period_key"] == "corrected-archive"
+
+
+def test_smhi_csv_parser_tolerates_extra_semicolon_field(monkeypatch):
+    from src import ingest as module
+
+    class FakeResponse:
+        text = (
+            "# metadata line\\n"
+            "Datum;Tid (UTC);Lufttemperatur;Kvalitet\\n"
+            "2026-01-01;00:00:00;8.5;G;extra\\n"
+        )
+
+        def raise_for_status(self):
+            pass
+
+    monkeypatch.setattr(
+        module,
+        "find_nearest_station",
+        lambda parameter: {"key": "test", "name": "test", "_period_key": "corrected-archive"},
+    )
+    monkeypatch.setattr(module.SESSION, "get", lambda *args, **kwargs: FakeResponse())
+
+    result = module.fetch_smhi_observations(
+        1,
+        "temperature_c",
+        pd.Timestamp("2026-01-01T00:00Z"),
+        pd.Timestamp("2026-01-01T01:00Z"),
+    )
+
+    assert result.iloc[0, 0] == pytest.approx(8.5)
