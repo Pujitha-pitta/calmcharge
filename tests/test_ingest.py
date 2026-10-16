@@ -86,9 +86,9 @@ def test_smhi_csv_parser_tolerates_extra_semicolon_field(monkeypatch):
 
     class FakeResponse:
         text = (
-            "# metadata line\\n"
-            "Datum;Tid (UTC);Lufttemperatur;Kvalitet\\n"
-            "2026-01-01;00:00:00;8.5;G;extra\\n"
+            "# metadata line\n"
+            "Datum;Tid (UTC);Lufttemperatur;Kvalitet\n"
+            "2026-01-01;00:00:00;8.5;G;extra\n"
         )
 
         def raise_for_status(self):
