@@ -120,23 +120,35 @@ def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 
 def find_nearest_station(parameter: int) -> dict[str, Any]:
+    """Return the nearest station with a usable observation archive."""
     metadata = _get_json(f"{SMHI_URL}/parameter/{parameter}.json")
-    stations = metadata.get("station", [])
     candidates = [
         station
-        for station in stations
+        for station in metadata.get("station", [])
         if station.get("latitude") is not None and station.get("longitude") is not None
     ]
-    if not candidates:
-        raise ValueError(f"SMHI has no stations with coordinates for parameter {parameter}")
-    return min(
-        candidates,
+    candidates.sort(
         key=lambda station: _haversine_km(
             MALMO_LAT,
             MALMO_LON,
             float(station["latitude"]),
             float(station["longitude"]),
-        ),
+        )
+    )
+    for station in candidates:
+        detail = _get_json(
+            f"{SMHI_URL}/parameter/{parameter}/station/{station['key']}.json"
+        )
+        period_keys = {item.get("key") for item in detail.get("period", [])}
+        period = next(
+            (key for key in ("corrected-archive", "latest-months") if key in period_keys),
+            None,
+        )
+        if period:
+            return {**station, "_period_key": period}
+    raise ValueError(
+        f"No SMHI station has a corrected archive or latest-months period "
+        f"for parameter {parameter}"
     )
 
 
@@ -145,18 +157,7 @@ def fetch_smhi_observations(
 ) -> pd.DataFrame:
     """Fetch parameter 1 (temperature) or 4 (wind speed) from a nearby SMHI station."""
     station = find_nearest_station(parameter)
-    periods = station.get("period", [])
-    period_keys = {period.get("key") for period in periods}
-    period = next(
-        (key for key in ("corrected-archive", "latest-months") if key in period_keys),
-        None,
-    )
-    if period is None:
-        raise ValueError(
-            f"No supported archive period for SMHI station {station.get('name')} "
-            f"(parameter {parameter})"
-        )
-
+    period = station["_period_key"]
     url = (
         f"{SMHI_URL}/parameter/{parameter}/station/{station['key']}"
         f"/period/{period}/data.csv"
