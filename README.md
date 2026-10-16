@@ -1,6 +1,6 @@
 # CalmCharge
 
-An electricity-price analytics and EV charging project for Sweden's SE4 region. The project ingests public price and weather data, explores price patterns, and compares simple forecasting methods before building toward a cost-aware charging scheduler.
+An electricity-price analytics and EV charging project for Sweden's SE4 region. The project ingests public price and weather data, explores price patterns, and compares forecasting methods before building toward a cost-aware charging scheduler.
 
 ## Progress
 
@@ -10,12 +10,14 @@ An electricity-price analytics and EV charging project for Sweden's SE4 region. 
 - [x] Data quality checks: hourly timestamps, duplicates, and missing values
 - [x] Exploratory charts by hour, weekday, and month
 - [x] Baseline comparisons and first ridge-regression model
-- [ ] Confirm the model with expanding-window time-series validation
+- [x] Expanding-window time-series validation
 - [ ] Build a practical charging recommendation and cost model
 
 ## Current experiment
 
-The local dataset used for this run contains 17,520 hourly observations from 2024-10-15 through 2026-10-14. The first 70% was used as training history and the latest 30% as a chronological holdout. Each prediction is one hour ahead and uses earlier observed prices; this is an initial experiment, not yet a day-ahead forecast.
+The local dataset used for these results contains 17,520 hourly observations from 2024-10-15 through 2026-10-14. Each prediction is one hour ahead and uses earlier observed prices. This is not yet a day-ahead forecast.
+
+A chronological holdout using the earliest 70% as training history and latest 30% for evaluation produced:
 
 | Method | MAE (EUR/MWh) | RMSE (EUR/MWh) |
 | --- | ---: | ---: |
@@ -24,7 +26,15 @@ The local dataset used for this run contains 17,520 hourly observations from 202
 | Previous 7 days, same UTC hour average | 41.03 | 53.30 |
 | Last week, same UTC hour | 48.05 | 65.79 |
 
-Lower scores are better. The ridge regression model performed best on this single holdout. The next validation step checks it across three later time periods before treating this result as reliable. Re-run the scripts on your current local dataset to reproduce or update the scores.
+The expanding-window validation then trained on progressively longer histories and evaluated three later periods:
+
+| Validation fold | Evaluation period (UTC) | Ridge model MAE / RMSE |
+| --- | --- | ---: |
+| 1 | 2026-03-12 02:00 to 2026-05-23 08:00 | 12.29 / 17.19 |
+| 2 | 2026-05-23 09:00 to 2026-08-03 15:00 | 13.23 / 20.57 |
+| 3 | 2026-08-03 16:00 to 2026-10-14 23:00 | 17.72 / 28.29 |
+
+Combined across the 5,206 validation hours, the ridge model scored **MAE 14.41** and **RMSE 22.50 EUR/MWh**. The baselines scored MAE 40.10 (yesterday), 41.06 (previous seven-day same-hour average), and 48.14 (last week). The ridge model led on both combined metrics in all three folds. Scores worsen in the latest fold, so this result is evidence for this dataset and period, not a guarantee of future performance.
 
 ## Explore the data and run the models
 
@@ -43,7 +53,7 @@ The exploration script prints summary statistics and saves three local charts un
 - `average_by_weekday.png`
 - `average_by_month.png`
 
-The validation script uses expanding training windows and later, unseen timestamps for evaluation. All charts and parquet data are generated locally; they are not committed to the repository.
+The validation script uses expanding training windows and later, unseen timestamps for evaluation. The charts and parquet data are generated locally and are not committed to the repository.
 
 ## Build the initial table
 
