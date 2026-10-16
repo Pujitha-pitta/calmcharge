@@ -116,15 +116,17 @@ def fetch_se4_prices(start: str, end: str) -> pd.DataFrame:
     if raw.empty:
         raise ValueError("Energi Data Service returned no SE4 price records")
 
-    time_col = _first_present(raw, ("HourUTC", "TimeUTC", "MinutesUTC"))
-    price_col = _first_present(
-        raw,
-        ("SpotPriceEUR", "DayAheadPriceEUR"),
-    )
     if "PriceArea" in raw:
         raw = raw.loc[raw["PriceArea"].eq("SE4")].copy()
-    result = raw[[time_col, price_col]].copy()
-    result.columns = ["timestamp", "price"]
+    timestamps = pd.Series(pd.NA, index=raw.index, dtype="object")
+    prices = pd.Series(pd.NA, index=raw.index, dtype="object")
+    for name in ("HourUTC", "TimeUTC", "MinutesUTC"):
+        if name in raw:
+            timestamps = timestamps.combine_first(raw[name])
+    for name in ("SpotPriceEUR", "DayAheadPriceEUR"):
+        if name in raw:
+            prices = prices.combine_first(raw[name])
+    result = pd.DataFrame({"timestamp": timestamps, "price": prices}, index=raw.index)
     result["timestamp"] = pd.to_datetime(result["timestamp"], utc=True, errors="coerce")
     result["price"] = pd.to_numeric(result["price"], errors="coerce")
     result = result.dropna(subset=["timestamp", "price"])
