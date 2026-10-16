@@ -62,8 +62,8 @@ def test_station_lookup_uses_station_detail_to_find_archive(monkeypatch):
     responses = {
         f"{module.SMHI_URL}/parameter/1.json": {
             "station": [
-                {"key": "near", "name": "Malmö 2", "latitude": 55.60, "longitude": 13.00, "active": false},
-                {"key": "archive", "name": "Lund", "latitude": 55.70, "longitude": 13.20, "active": true},
+                {"key": "near", "name": "Malmö 2", "latitude": 55.60, "longitude": 13.00, "active": False},
+                {"key": "archive", "name": "Lund", "latitude": 55.70, "longitude": 13.20, "active": True},
             ]
         },
         f"{module.SMHI_URL}/parameter/1/station/near.json": {
