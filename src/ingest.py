@@ -172,10 +172,9 @@ def fetch_smhi_observations(
             for index, row in enumerate(rows)
             if len(row) >= 3
             and row[0].strip().lstrip("\ufeff").lower() in ("datum", "date")
-            and "tid" in row[1].strip().lower() or (
-                len(row) >= 3
-                and row[0].strip().lstrip("\ufeff").lower() in ("datum", "date")
-                and row[1].strip().lower() == "time"
+            and (
+                "tid" in row[1].strip().lower()
+                or row[1].strip().lower() == "time"
             )
         ),
         None,
