@@ -207,26 +207,31 @@ class LightGBMForecaster:
     name = "LightGBM"
     columns = LAG_FEATURES + CALENDAR_FEATURES + ["hour", "weekday"]
 
+    params = {
+        "objective": "l1",
+        "learning_rate": 0.03,
+        "num_leaves": 31,
+        "min_data_in_leaf": 30,
+        "bagging_fraction": 0.8,
+        "bagging_freq": 1,
+        "feature_fraction": 0.8,
+        "seed": 0,
+        "deterministic": True,
+        "num_threads": 1,
+        "verbose": -1,
+    }
+    rounds = 500
+
     def fit(self, features: pd.DataFrame, target: pd.Series) -> "LightGBMForecaster":
+        # The native API avoids LightGBM's scikit-learn wrapper (and that dependency).
         import lightgbm as lgb
 
-        self.model = lgb.LGBMRegressor(
-            objective="l1",
-            n_estimators=500,
-            learning_rate=0.03,
-            num_leaves=31,
-            min_child_samples=30,
-            subsample=0.8,
-            subsample_freq=1,
-            colsample_bytree=0.8,
-            random_state=0,
-            verbose=-1,
-        )
-        self.model.fit(features[self.columns], target)
+        data = lgb.Dataset(features[self.columns].astype(float), label=target.astype(float))
+        self.booster = lgb.train(self.params, data, num_boost_round=self.rounds)
         return self
 
     def predict(self, features: pd.DataFrame) -> np.ndarray:
-        return self.model.predict(features[self.columns])
+        return self.booster.predict(features[self.columns].astype(float))
 
 
 def lightgbm_available() -> bool:
@@ -359,6 +364,8 @@ def forecast_next_day(
 
     available = make_models()
     key = model_key or (backtest.model_key if backtest else ("lightgbm" if "lightgbm" in available else "ridge"))
+    if key not in available:
+        key = "ridge"  # e.g. LightGBM can't load on this machine
     model = available[key]().fit(train, train["actual"])
     forecast = pd.Series(model.predict(query), index=range(24))
 

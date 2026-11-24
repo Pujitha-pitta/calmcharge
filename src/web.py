@@ -1,6 +1,11 @@
 """CalmCharge web app: a FastAPI backend serving JSON plus a single-page frontend.
 
 Run locally:  python -m src.web      then open http://127.0.0.1:8000
+On Vercel the same `app` runs as a function (see pyproject.toml) and the
+frontend in public/ is served from the CDN.
+
+Startup data comes from the newest of: the local price cache, or the snapshot
+committed in data/snapshot/. Only prices published since then are downloaded.
 """
 
 from __future__ import annotations
@@ -13,7 +18,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.backtest_savings import STRATEGIES, Scenario, simulate, summarise
@@ -29,10 +34,17 @@ from src.day_ahead import (
     walk_forward,
 )
 
-WEB_DIR = Path(__file__).resolve().parent.parent / "web"
+ROOT = Path(__file__).resolve().parent.parent
+PUBLIC_DIR = ROOT / "public"
+SNAPSHOT_DIR = ROOT / "data" / "snapshot"
+SNAPSHOT_PRICES = SNAPSHOT_DIR / "se4_prices.csv"
+SNAPSHOT_BACKTEST = SNAPSHOT_DIR / "day_ahead_backtest.csv"
 BACKTEST_CACHE = REPORT_DIR / "day_ahead_backtest.csv"
 PRICE_REFRESH_SECONDS = 60 * 60
 BACKTEST_DAYS = 365
+# The backtest is a year of history: a few days' lag doesn't change it meaningfully,
+# and rerunning it on every cold start would be slow.
+BACKTEST_MAX_AGE_DAYS = 21
 
 
 # ------------------------------------------------------------------ state
@@ -74,10 +86,14 @@ class Store:
 def _load_and_top_up_prices() -> pd.Series:
     from src.ingest import fetch_se4_prices
 
+    sources = []
     try:
-        history = load_prices()
+        sources.append(load_prices())
     except FileNotFoundError:
-        history = pd.Series(dtype=float)
+        pass
+    if SNAPSHOT_PRICES.exists():
+        sources.append(load_prices(path=Path("missing.parquet"), cache=SNAPSHOT_PRICES))
+    history = max(sources, key=lambda s: s.index.max()) if sources else pd.Series(dtype=float)
     now = pd.Timestamp.now(tz="UTC")
     start = history.index.max() - timedelta(days=2) if not history.empty else now - timedelta(days=BACKTEST_DAYS + 200)
     try:
@@ -97,11 +113,17 @@ def _load_and_top_up_prices() -> pd.Series:
 
 
 def _cached_backtest(last_complete: pd.Timestamp) -> Backtest | None:
-    """Reuse the saved backtest if it already ends at the latest published day."""
-    if not BACKTEST_CACHE.exists():
+    """Reuse the newest saved backtest (local cache or committed snapshot) if it is recent."""
+    frames = [
+        pd.read_csv(path, index_col=["date", "hour"], parse_dates=["date"])
+        for path in (BACKTEST_CACHE, SNAPSHOT_BACKTEST)
+        if path.exists()
+    ]
+    if not frames:
         return None
-    frame = pd.read_csv(BACKTEST_CACHE, index_col=["date", "hour"], parse_dates=["date"])
-    if frame.index.get_level_values("date").max() != last_complete:
+    frame = max(frames, key=lambda f: f.index.get_level_values("date").max())
+    age = last_complete - frame.index.get_level_values("date").max()
+    if age > timedelta(days=BACKTEST_MAX_AGE_DAYS) or age < timedelta(0):
         return None
     errors = {c: (frame[c] - frame["actual"]).abs().mean() for c in frame if c in ("pred_LightGBM", "pred_Ridge regression")}
     best = min(errors, key=errors.get) if errors else "pred_Ridge regression"
@@ -249,18 +271,22 @@ def api_savings(
 
 # ------------------------------------------------------------------ pages
 
-app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
-
-
 @app.get("/", include_in_schema=False)
-def index() -> FileResponse:
-    return FileResponse(WEB_DIR / "index.html")
+def index():
+    # On Vercel the CDN serves public/index.html before requests reach the app.
+    page = PUBLIC_DIR / "index.html"
+    return FileResponse(page) if page.exists() else RedirectResponse("/index.html")
+
+
+# Locally, serve the frontend files too (registered last so /api routes win).
+if PUBLIC_DIR.exists():
+    app.mount("/", StaticFiles(directory=PUBLIC_DIR), name="public")
 
 
 def main() -> None:
     import uvicorn
 
-    print("Preparing prices and forecast (first start runs a year-long backtest, ~1 minute)...")
+    print("Preparing prices and forecast...")
     store.get()
     print("CalmCharge is running at http://127.0.0.1:8000  (Ctrl+C to stop)")
     uvicorn.run(app, host="127.0.0.1", port=8000, log_level="warning")

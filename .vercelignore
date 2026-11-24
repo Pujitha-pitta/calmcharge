@@ -1,0 +1,8 @@
+.venv/
+.claude/
+.pytest_cache/
+reports/
+tests/
+docs/
+data/raw/
+data/processed/

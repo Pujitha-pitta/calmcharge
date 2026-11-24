@@ -1,0 +1,21 @@
+[project]
+name = "calmcharge"
+version = "0.2.0"
+description = "Day-ahead SE4 price forecasts and cheapest-hour EV charging plans"
+requires-python = ">=3.11"
+# Runtime dependencies for the web app (Vercel installs these).
+# Development and analysis tools are in requirements.txt.
+dependencies = [
+    "pandas>=2.2,<3.0",
+    "numpy>=1.26,<3.0",
+    "lightgbm>=4.5",
+    "requests>=2.32",
+    "holidays>=0.60",
+    "fastapi>=0.115",
+]
+
+[tool.vercel]
+entrypoint = "src.web:app"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

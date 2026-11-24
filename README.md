@@ -107,7 +107,8 @@ src/day_ahead.py           Day-ahead forecast, walk-forward validation, predicti
 src/charging.py            Cheapest-hour charging optimizer (windows can cross midnight)
 src/backtest_savings.py    Year-long savings simulation of four charging strategies
 src/web.py                 FastAPI backend for the web app
-web/                       Frontend: index.html, style.css, app.js
+public/                    Frontend: index.html, style.css, app.js (served by the CDN on Vercel)
+data/snapshot/             Committed price and backtest snapshot so the hosted app starts fast
 src/explore.py             Exploratory charts
 src/train_model.py         Earlier one-hour-ahead ridge model
 src/validate_model.py      Expanding-window validation of that model
