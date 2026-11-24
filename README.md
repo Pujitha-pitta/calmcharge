@@ -2,6 +2,8 @@
 
 [![tests](https://github.com/Pujitha-pitta/calmcharge/actions/workflows/tests.yml/badge.svg)](https://github.com/Pujitha-pitta/calmcharge/actions/workflows/tests.yml)
 
+**Live app: [calmcharge.vercel.app](https://calmcharge.vercel.app)**
+
 I built CalmCharge as a hands-on project to follow electricity-price data from download through analysis and into a charging plan. It uses public data for Sweden's SE4 region. I don't have a vehicle, so the EV in the planner is a simulation with example battery settings.
 
 **Headline result:** over 364 real nights (25 Nov 2025 to 23 Nov 2026), charging a simulated EV with 15 kWh between 18:00 and 07:00 in the cheapest hours cut the energy cost by **45%** compared with plugging in and charging straight away. Planning at 11:00, *before* the next day's prices are published, using my day-ahead forecast still captured **90%** of that saving.
@@ -91,7 +93,7 @@ The step from a one-hour-ahead model to a true day-ahead one taught me the most.
 
 - Add archived weather forecasts (wind and temperature drive SE4 prices) as issued at the forecast cutoff.
 - Calibrate the forecast ranges so 80% ranges hold the price 80% of the time.
-- Host the web app publicly with a scheduled daily price refresh.
+- Refresh the committed data snapshot daily with a scheduled job.
 - Check the cost calculation against a real electricity bill.
 
 ## Data sources
