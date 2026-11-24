@@ -1,150 +1,123 @@
 # CalmCharge
 
+[![tests](https://github.com/Pujitha-pitta/calmcharge/actions/workflows/tests.yml/badge.svg)](https://github.com/Pujitha-pitta/calmcharge/actions/workflows/tests.yml)
+
 I built CalmCharge as a hands-on project to follow electricity-price data from download through analysis and into a charging plan. It uses public data for Sweden's SE4 region. I don't have a vehicle, so the EV in the planner is a simulation with example battery settings.
 
-## Progress
+**Headline result:** over 364 real nights (25 Nov 2025 to 23 Nov 2026), charging a simulated EV with 15 kWh between 18:00 and 07:00 in the cheapest hours cut the energy cost by **45%** compared with plugging in and charging straight away. Planning at 11:00, *before* the next day's prices are published, using my day-ahead forecast still captured **90%** of that saving.
 
-- [x] Repository scaffold and CI
-- [x] Hourly SE4 electricity-price ingestion and normalization
-- [x] Historical weather and Swedish calendar features
-- [x] Data quality checks: hourly timestamps, duplicates, and missing values
-- [x] Exploratory charts by hour, weekday, and month
-- [x] Baseline comparisons and first ridge-regression model
-- [x] Expanding-window time-series validation
-- [x] Cheapest-hour charging planner using historical prices
-- [x] Fetch published SE4 day-ahead prices for an upcoming schedule
-- [x] Account for configurable battery state and variable tariff inputs
-- [ ] Validate the cost estimate against an actual electricity bill
+![A year of simulated overnight charging on real SE4 prices](docs/savings_backtest.png)
 
-## Forecasting experiment
+## What it does
 
-The local dataset used for these results contains 17,520 hourly observations from 2024-10-15 through 2026-10-14. Each prediction is one hour ahead and uses earlier observed prices. This is not yet a day-ahead forecast.
+1. **Downloads and cleans** SE4 day-ahead prices (Energi Data Service), SMHI weather and Swedish holidays into an hourly UTC table.
+2. **Forecasts tomorrow's 24 hourly prices** at 11:00 the day before, using only information that was public at that moment, with an 80% likely range for each hour.
+3. **Plans the charge**: picks the cheapest hours between plug-in and departure (windows can cross midnight), using published prices where they exist and the forecast where they don't.
+4. **Backtests the savings** over a full year of nights and compares four strategies.
+5. **Shows it all in a web app**: a FastAPI backend with a hand-built frontend.
 
-A chronological holdout using the earliest 70% as training history and latest 30% for evaluation produced:
+## Day-ahead forecast
+
+The forecast for day *T* is made at 11:00 on day *T−1*, just before the noon auction. At that moment the prices for *T−1* are already public, but nothing about *T* is. The features are prices for the same hour on *T−1*, *T−2* and *T−7*, the shape of the *T−1* price curve, and calendar facts about *T*. Validation is walk-forward: every day is forecast by a model trained only on earlier days and retrained weekly. A test corrupts a day's real prices and checks that its own forecast doesn't change.
+
+Walk-forward results over 365 days (25 Nov 2025 to 24 Nov 2026), lower is better:
 
 | Method | MAE (EUR/MWh) | RMSE (EUR/MWh) |
 | --- | ---: | ---: |
-| Ridge regression model | 14.41 | 22.45 |
-| Yesterday, same UTC hour | 39.99 | 57.73 |
-| Previous 7 days, same UTC hour average | 41.03 | 53.30 |
-| Last week, same UTC hour | 48.05 | 65.79 |
+| LightGBM | **28.41** | 42.01 |
+| Ridge regression (NumPy) | 29.28 | **41.63** |
+| Same hour, previous day | 38.39 | 55.61 |
+| Same hour, 7-day average | 41.12 | 56.00 |
+| Same hour, one week earlier | 50.77 | 72.02 |
 
-The expanding-window validation then trained on progressively longer histories and evaluated three later periods:
+LightGBM's average error is **26% lower** than the best simple baseline. The 80% range is built from the model's own recent out-of-sample errors. It held the real price **75%** of the time, slightly under the 80% target, so the ranges are a little too narrow.
 
-| Validation fold | Evaluation period (UTC) | Ridge model MAE / RMSE |
-| --- | --- | ---: |
-| 1 | 2026-03-12 02:00 to 2026-05-23 08:00 | 12.29 / 17.19 |
-| 2 | 2026-05-23 09:00 to 2026-08-03 15:00 | 13.23 / 20.57 |
-| 3 | 2026-08-03 16:00 to 2026-10-14 23:00 | 17.72 / 28.29 |
+![Forecast vs. actual, last 14 days](docs/day_ahead_forecast.png)
 
-Combined across the 5,206 validation hours, the ridge model scored **MAE 14.41** and **RMSE 22.50 EUR/MWh**. The baselines scored MAE 40.10 (yesterday), 41.06 (previous seven-day same-hour average), and 48.14 (last week). The ridge model led on both combined metrics in all three folds. Scores worsen in the latest fold, so this result is evidence for this dataset and period, not a guarantee of future performance.
+## Savings backtest
 
-## What I learned
+Each evening a simulated EV plugs in at 18:00, needs 15 kWh in the battery by 07:00, and charges at 7.2 kW with 90% efficiency. Every strategy pays the real SE4 price:
 
-The most useful part of this project was seeing how much care a time-series project needs before modeling: prices arrive in different market formats, source timestamps use Denmark's local time, and the finished schedules need to make sense in Sweden's local time. I store the data in UTC and convert it for display.
+| Strategy | Energy cost (EUR) | Saving |
+| --- | ---: | ---: |
+| Plug in and charge straight away | 854.38 | |
+| Rule: reuse yesterday's cheapest hours | 528.99 | 38.1% |
+| Smart, forecast locked in at 11:00 | 508.24 | 40.5% |
+| Smart, published prices (after ~13:00) | 467.63 | 45.3% |
 
-I also compared the ridge model with simple price-history baselines and used expanding-window validation so each evaluation fold only learns from earlier data. On this dataset, the model beat those baselines, but the latest fold scored worse than the earlier ones. That is a good reason to treat the result as an experiment, not a promise about future prices.
+To be honest about it: most of the saving comes simply from moving charging into the night. The forecast beats the "yesterday's cheap hours" rule, but by a modest €21 a year at this usage. The forecast matters most when a plan has to be fixed before prices are published. These are energy-only market prices. Per-kWh grid fees and taxes are the same under every strategy, so they don't change the saving.
 
-## What I would improve next
-
-- Try a true day-ahead forecast using only information that would have been available when the forecast was made.
-- Add archived weather forecasts instead of relying on historical weather observations.
-- Check the cost calculation against a real electricity tariff before presenting it as a household-cost estimate.
-- Test the planner with more dates and edge cases, including daylight-saving-time changes.
-
-## Explore the data and run the models
+## Run it
 
 Requires Python 3.11 or newer. In PowerShell, from the repository folder:
 
 ```powershell
-.\.venv\Scripts\python.exe -m src.explore
-.\.venv\Scripts\python.exe -m src.evaluate_baselines
-.\.venv\Scripts\python.exe -m src.train_model
-.\.venv\Scripts\python.exe -m src.validate_model
-```
-
-The exploration script prints summary statistics and saves three local charts under `reports/phase2/`:
-
-- `average_by_hour.png`
-- `average_by_weekday.png`
-- `average_by_month.png`
-
-## Historical charging-plan demo
-
-Choose a date and an available charging window from your downloaded dataset. Example: request 10 kWh into the battery between 18:00 and 23:00 on October 14, 2026, with a 7.2 kW charger and 90% efficiency:
-
-```powershell
-.\.venv\Scripts\python.exe -m src.plan_charge --date 2026-10-14 --start-hour 18 --end-hour 23 --energy-kwh 10 --charger-kw 7.2 --efficiency 0.90
-```
-
-This historical demo selects the cheapest hours in the window and estimates market-energy cost. It does not make a live recommendation.
-
-## Upcoming day-ahead charging plan
-
-The live planner requests published SE4 day-ahead prices from Energi Data Service. By default, it tries tomorrow's date in Sweden time. If the market has not published prices yet, wait and run the command again later.
-
-No real car is needed for the project: use an explicitly labeled simulated EV profile. For example, the following assumes a 60 kWh usable battery, charging from 30% to 50%, a 7.2 kW AC limit, and 90% efficiency. These are example settings, not specifications for a particular vehicle:
-
-```powershell
-.\.venv\Scripts\python.exe -m src.plan_live_charge --start-hour 18 --end-hour 23 --battery-capacity-kwh 60 --current-soc 30 --target-soc 50 --charger-kw 7.2 --efficiency 0.90
-```
-
-The planner derives the requested energy from the battery capacity and state-of-charge change, then selects the cheapest hours. It reports a market-energy estimate in EUR. Optional variable tariff inputs are `--retail-adder-sek-kwh`, `--grid-fee-sek-kwh`, and `--energy-tax-sek-kwh`. To include them, provide the corresponding SEK/kWh values from a sample contract, plus `--sek-per-eur` and `--vat-percent`. Clearly label assumed values in project reports. Fixed monthly charges are excluded. Verify taxes and fees against the applicable contract before treating the estimate as a household bill.
-
-The API request timestamps use Danish local time; the project converts them to UTC and displays the schedule in Swedish local time.
-
-## Local web dashboard
-
-Start a small dashboard on your computer using the same live planner and simulated EV defaults:
-
-```powershell
-.\.venv\Scripts\python.exe -m src.dashboard
-```
-
-Leave that PowerShell window open, then visit [http://127.0.0.1:8765](http://127.0.0.1:8765) in your browser. Choose a date, charging window, and simulated battery settings, then select **Find cheapest hours**. The dashboard requests published SE4 day-ahead prices, so a date may be unavailable until prices are published.
-
-Stop the dashboard with **Ctrl+C** in its PowerShell window. It runs only on your computer and does not connect to or control a vehicle or charger. Cost results are estimates based on the entered assumptions; fixed charges are excluded.
-
-## Build the initial table
-
-Requires Python 3.11 or newer.
-
-```powershell
 py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 pytest
-python -m src.ingest --start 2024-10-15 --end 2026-10-15
 ```
 
-The end date is exclusive. The ingestion command writes `data/processed/se4_hourly.parquet`. Price and time data are normalized to an hourly UTC index. The source API switches to newer market intervals at Denmark's local midnight on 2025-10-01; the ingestion code handles that source boundary when stitching its price datasets.
+Download prices, run the forecast backtest, then the savings backtest:
 
-## Time, features, and data limitations
+```powershell
+python -m src.day_ahead --fetch
+python -m src.backtest_savings --sek-per-eur 11.2
+```
 
-All stored timestamps are timezone-aware UTC. Charts and charging plans display Sweden's local time. The first model uses calendar fields and earlier observed prices; it does not use observed future weather, which would leak information unavailable at forecast time.
+The first command downloads about two years of prices into `data/processed/se4_prices.csv` (this can take a few minutes) and writes results and charts to `reports/`. After that, `python -m src.day_ahead` reuses the cached prices.
 
-SMHI weather observations are historical analysis inputs. A realistic weather-based day-ahead model needs archived weather forecasts as issued at the forecast cutoff. Market prices are EUR/MWh and do not include household fees or taxes unless you provide variable tariff inputs; verify those inputs against your own electricity contract.
+### Web app
+
+```powershell
+python -m src.web
+```
+
+Open [http://127.0.0.1:8000](http://127.0.0.1:8000). The first start runs the year-long backtest (about a minute) and caches it. After that the app only downloads the newest prices. Change the battery, charger, plug-in and departure times, or add your own household tariff in SEK. The plan, the savings for the past year and the forecast update as you type. The JSON API is documented at `/api/docs`.
+
+The app never connects to or controls a real car or charger. Cost results are estimates based on the values you enter, and fixed monthly charges are excluded.
+
+## Earlier experiments
+
+Before the day-ahead model, I compared a one-hour-ahead ridge model with simple baselines (`src/train_model.py`, `src/validate_model.py`). With expanding-window validation it scored MAE 14.41 EUR/MWh against 40.10 for "same hour yesterday". Those predictions used the price from one hour earlier, which isn't available when the day-ahead market closes, so they couldn't drive a real charging plan. That's why I built the day-ahead forecast. `src/explore.py` draws price profiles by hour, weekday and month. `src/plan_charge.py` and `src/plan_live_charge.py` are the first command-line planners, and `src/dashboard.py` is a dependency-free local dashboard.
+
+## What I learned
+
+The most useful part of this project was seeing how much care a time-series project needs before modeling: prices arrive in different market formats, source timestamps use Denmark's local time, and the finished schedules need to make sense in Sweden's local time. I store the data in UTC and convert it for display. Daylight-saving days have 23 or 25 hours, so the forecast works on a 24-column grid per Swedish day and maps back to real clock hours.
+
+The step from a one-hour-ahead model to a true day-ahead one taught me the most. The earlier model looked far more accurate, but only because it had information a real forecaster wouldn't have. Defining exactly what is known at 11:00 the day before, and testing that the model can't see past it, made the results smaller but honest. The savings backtest also showed that a simple rule gets you most of the way. That's worth knowing before adding complexity.
+
+## What I would improve next
+
+- Add archived weather forecasts (wind and temperature drive SE4 prices) as issued at the forecast cutoff.
+- Calibrate the forecast ranges so 80% ranges hold the price 80% of the time.
+- Host the web app publicly with a scheduled daily price refresh.
+- Check the cost calculation against a real electricity bill.
 
 ## Data sources
 
-- [Energi Data Service API](https://api.energidataservice.dk/) — SE4 day-ahead prices
-- [Energi Data Service API guide](https://energidataservice.dk/guides/api-guides) — API query rules and Danish-local timestamps
-- [SMHI Meteorological Observations API](https://opendata.smhi.se/metobs/) — historical hourly weather observations
+- [Energi Data Service API](https://api.energidataservice.dk/): SE4 day-ahead prices ([API guide](https://energidataservice.dk/guides/api-guides))
+- [SMHI Meteorological Observations API](https://opendata.smhi.se/metobs/): historical hourly weather observations
 
 ## Project layout
 
 ```
-src/ingest.py                 Download, normalize, validate, and store phase-one data
-src/explore.py                Summary statistics and exploratory charts
-src/evaluate_baselines.py     Chronological baseline metrics
-src/train_model.py            One-hour-ahead ridge-regression model
-src/validate_model.py         Expanding-window time-series evaluation
-src/plan_charge.py            Cheapest-hour historical charging demo
-src/plan_live_charge.py       Live plan with simulated EV and tariff inputs
-src/dashboard.py              Local web dashboard for the simulated live planner
-tests/                        Data cleaning and UTC-grid tests
-data/raw/                     Downloaded source files (gitignored)
-data/processed/               Generated parquet tables (gitignored)
-reports/phase2/               Generated charts (local output)
+src/ingest.py              Download, normalize, validate and store prices and weather
+src/day_ahead.py           Day-ahead forecast, walk-forward validation, prediction ranges
+src/charging.py            Cheapest-hour charging optimizer (windows can cross midnight)
+src/backtest_savings.py    Year-long savings simulation of four charging strategies
+src/web.py                 FastAPI backend for the web app
+web/                       Frontend: index.html, style.css, app.js
+src/explore.py             Exploratory charts
+src/train_model.py         Earlier one-hour-ahead ridge model
+src/validate_model.py      Expanding-window validation of that model
+src/plan_charge.py         First historical planner (command line)
+src/plan_live_charge.py    First live planner (command line)
+src/dashboard.py           Dependency-free local dashboard
+tests/                     Data, forecast-leakage, optimizer, backtest and API tests
+docs/                      Charts used in this README
 ```
+
+## Notes on Windows Application Control
+
+On some Windows machines, Smart App Control blocks compiled Python libraries. On mine it blocks pyarrow's Parquet module. The forecast and web app therefore cache prices as plain CSV, read Parquet only when it is available, and fall back to the NumPy ridge model if LightGBM can't load.

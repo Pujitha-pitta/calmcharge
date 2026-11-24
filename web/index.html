@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CalmCharge</title>
+  <meta name="description" content="Find the cheapest hours to charge an EV on Sweden's SE4 electricity prices, with a day-ahead forecast for hours not yet published.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230F1B33'/><path d='M18 4 9 18h6l-2 10 10-15h-6z' fill='%23F2A93B'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="masthead">
+    <a class="wordmark" href="/">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M18 4 9 18h6l-2 10 10-15h-6z"/></svg>
+      CalmCharge
+    </a>
+    <p class="status" id="status">Loading SE4 prices…</p>
+  </header>
+
+  <main>
+    <section class="tonight" aria-labelledby="answer">
+      <div class="answer-block">
+        <h1 id="answer" class="answer">Finding the cheapest hours…</h1>
+        <p id="answer-detail" class="answer-detail"></p>
+        <p id="forecast-note" class="note" hidden></p>
+      </div>
+
+      <div class="plan-grid">
+        <figure class="night-chart">
+          <div class="chart-box tall"><canvas id="plan-chart" role="img" aria-label="Hourly prices across the charging window, with charging hours highlighted"></canvas></div>
+          <figcaption class="legend">
+            <span><i class="swatch lamp"></i>Charging</span>
+            <span><i class="swatch idle"></i>Waiting</span>
+            <span><i class="swatch hatch"></i>Forecast, not yet published</span>
+          </figcaption>
+        </figure>
+
+        <form id="settings" class="settings" autocomplete="off">
+          <fieldset>
+            <legend>Car</legend>
+            <label>Usable battery
+              <span class="field"><input name="capacity_kwh" type="number" min="10" max="250" step="1" value="60"><em>kWh</em></span>
+            </label>
+            <div class="pair">
+              <label>Charge from
+                <span class="field"><input name="soc_from" type="number" min="0" max="99" step="5" value="30"><em>%</em></span>
+              </label>
+              <label>to
+                <span class="field"><input name="soc_to" type="number" min="1" max="100" step="5" value="80"><em>%</em></span>
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Charger</legend>
+            <div class="segmented" role="radiogroup" aria-label="Charger power">
+              <label><input type="radio" name="charger_kw" value="3.7"><span>3.7 kW</span></label>
+              <label><input type="radio" name="charger_kw" value="7.2" checked><span>7.2 kW</span></label>
+              <label><input type="radio" name="charger_kw" value="11"><span>11 kW</span></label>
+            </div>
+            <label>Efficiency
+              <span class="field"><input name="efficiency" type="number" min="0.5" max="1" step="0.01" value="0.90"></span>
+            </label>
+          </fieldset>
+
+          <fieldset>
+            <legend>Timing</legend>
+            <label>Plug in
+              <span class="field"><input name="plug_date" type="date"></span>
+            </label>
+            <div class="pair">
+              <label>at<select name="plug_hour"></select></label>
+              <label>leave at<select name="depart_hour"></select></label>
+            </div>
+          </fieldset>
+
+          <details class="tariff">
+            <summary>Add your household tariff</summary>
+            <p class="hint">Use the rates from your own contract. Fixed monthly fees aren't included.</p>
+            <label>SEK per EUR
+              <span class="field"><input name="sek_per_eur" type="number" min="0" step="0.01" placeholder="e.g. 11.2"></span>
+            </label>
+            <label>Retailer markup
+              <span class="field"><input name="retail_sek_kwh" type="number" min="0" step="0.01" value="0"><em>SEK/kWh</em></span>
+            </label>
+            <label>Grid fee
+              <span class="field"><input name="grid_fee_sek_kwh" type="number" min="0" step="0.01" value="0"><em>SEK/kWh</em></span>
+            </label>
+            <label>Energy tax
+              <span class="field"><input name="energy_tax_sek_kwh" type="number" min="0" step="0.01" value="0"><em>SEK/kWh</em></span>
+            </label>
+            <label>VAT
+              <span class="field"><input name="vat_percent" type="number" min="0" max="100" step="1" value="0"><em>%</em></span>
+            </label>
+          </details>
+          <p class="hint">The car is a simulation. Nothing here controls a real vehicle or charger.</p>
+        </form>
+      </div>
+    </section>
+
+    <section class="year" aria-labelledby="year-title">
+      <h2 id="year-title">If you'd charged like this every night last year</h2>
+      <p id="year-summary" class="lede"></p>
+      <div class="chart-box"><canvas id="savings-chart" role="img" aria-label="Cumulative charging cost over the past year for each strategy"></canvas></div>
+      <p id="year-footnote" class="hint"></p>
+    </section>
+
+    <section class="ahead" aria-labelledby="ahead-title">
+      <h2 id="ahead-title">Forecast for the next unpublished day</h2>
+      <p id="ahead-summary" class="lede"></p>
+      <div class="chart-box"><canvas id="forecast-chart" role="img" aria-label="Forecast hourly prices with an 80 percent range"></canvas></div>
+      <table id="metrics" class="metrics">
+        <caption>Average error over the backtest, in EUR/MWh (lower is better)</caption>
+        <tbody></tbody>
+      </table>
+    </section>
+  </main>
+
+  <footer class="colophon">
+    <p>Prices: SE4 day-ahead market via <a href="https://www.energidataservice.dk/">Energi Data Service</a>, in EUR/MWh before fees and taxes. Forecasts use only prices public at 11:00 the day before. An educational project, not energy or financial advice.</p>
+    <p><a href="https://github.com/Pujitha-pitta/calmcharge">Source on GitHub</a> &nbsp; <a href="/api/docs">API docs</a></p>
+  </footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
