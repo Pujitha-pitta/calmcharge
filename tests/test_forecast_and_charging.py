@@ -12,6 +12,7 @@ from src.day_ahead import (
     LAG_FEATURES,
     build_features,
     daily_grid,
+    extend_backtest,
     forecast_next_day,
     walk_forward,
 )
@@ -161,6 +162,35 @@ def test_forecast_next_day_covers_every_clock_hour_with_ordered_ranges():
 
 
 # ------------------------------------------------------------------ savings
+
+
+def test_extend_backtest_appends_new_days_without_touching_old_rows():
+    grid = daily_grid(synthetic_prices(days=200))
+    last = grid.index.max()
+    old = walk_forward(grid.loc[: last - timedelta(days=3)], last - timedelta(days=32),
+                       model_keys=["ridge"], min_train_days=60).predictions
+    extended = extend_backtest(grid, old, keep_days=30)
+
+    new_days = sorted(set(extended.index.get_level_values("date")) - set(old.index.get_level_values("date")))
+    assert new_days == [last - timedelta(days=2), last - timedelta(days=1), last]
+    assert extended.index.get_level_values("date").nunique() == 30
+    kept = extended.index.intersection(old.index)
+    pd.testing.assert_frame_equal(extended.loc[kept], old.loc[kept])
+    assert extended.loc[last, ["forecast", "low", "high"]].notna().all().all()
+
+    # The new days' forecasts must not depend on their own actual prices.
+    tampered = grid.copy()
+    tampered.loc[last] += 500
+    np.testing.assert_allclose(
+        extend_backtest(tampered, old, keep_days=30).loc[last, "forecast"],
+        extended.loc[last, "forecast"],
+    )
+
+
+def test_extend_backtest_is_a_no_op_when_nothing_is_new():
+    grid = daily_grid(synthetic_prices(days=200))
+    old = walk_forward(grid, grid.index.max() - timedelta(days=9), model_keys=["ridge"], min_train_days=60).predictions
+    pd.testing.assert_frame_equal(extend_backtest(grid, old), old)
 
 
 @pytest.mark.parametrize("energy", [3.0, 10.0, 22.5, 40.0])

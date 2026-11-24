@@ -6,3 +6,5 @@ tests/
 docs/
 data/raw/
 data/processed/
+index.html
+.nojekyll

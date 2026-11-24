@@ -47,6 +47,9 @@ CALENDAR_FEATURES = ["is_offday", "month_sin", "month_cos"]
 
 
 PRICE_CACHE = Path("data/processed/se4_prices.csv")
+SNAPSHOT_DIR = Path(__file__).resolve().parent.parent / "data" / "snapshot"
+SNAPSHOT_PRICES = SNAPSHOT_DIR / "se4_prices.csv"
+SNAPSHOT_BACKTEST = SNAPSHOT_DIR / "day_ahead_backtest.csv"
 
 
 def load_prices(path: Path = DATA_PATH, cache: Path = PRICE_CACHE) -> pd.Series:
@@ -62,7 +65,7 @@ def load_prices(path: Path = DATA_PATH, cache: Path = PRICE_CACHE) -> pd.Series:
         except ImportError:
             frame = None
     if frame is None and cache.exists():
-        frame = pd.read_csv(cache, index_col=0)
+        frame = pd.read_csv(cache, index_col=0, float_precision="round_trip")
     if frame is None:
         raise FileNotFoundError(
             f"Could not find {path} or {cache}. Run `python -m src.day_ahead --fetch` first."
@@ -338,6 +341,58 @@ def walk_forward(
 
     keep = ["actual", "forecast", "low", "high"] + [c for c in test.columns if c.startswith("pred_")]
     return Backtest(predictions=test[keep], model_key=best)
+
+
+def best_model_key(predictions: pd.DataFrame) -> str:
+    """The available model with the lowest error in an existing backtest."""
+    available = make_models()
+    errors = {
+        key: (predictions[f"pred_{cls.name}"] - predictions["actual"]).abs().mean()
+        for key, cls in available.items()
+        if f"pred_{cls.name}" in predictions
+    }
+    return min(errors, key=errors.get) if errors else "ridge"
+
+
+def extend_backtest(
+    grid: pd.DataFrame,
+    predictions: pd.DataFrame,
+    *,
+    keep_days: int = 365,
+    interval_window_days: int = 90,
+) -> pd.DataFrame:
+    """Add forecasts for newly published days to an existing backtest, without redoing it.
+
+    New days are forecast by models trained only on days already in the past,
+    existing rows are left untouched, and the window is trimmed to ``keep_days``.
+    Used by the daily snapshot refresh so each update is a small, append-only change.
+    """
+    features = build_features(grid)
+    usable = features.dropna(subset=["actual"] + LAG_FEATURES)
+    dates = usable.index.get_level_values("date")
+    done = predictions.index.get_level_values("date").max()
+    if not (dates > done).any():
+        return predictions
+
+    train = usable.loc[dates <= done]  # every new day is strictly after this
+    new = usable.loc[dates > done].copy()
+    for label, column in BASELINES.items():
+        new[f"pred_{label}"] = new[column]
+    for cls in make_models().values():
+        new[f"pred_{cls.name}"] = cls().fit(train, train["actual"]).predict(new)
+    new["forecast"] = new[f"pred_{make_models()[best_model_key(predictions)].name}"]
+
+    # Ranges from the most recent out-of-sample errors, as in forecast_next_day.
+    recent_dates = predictions.index.get_level_values("date")
+    recent = predictions.loc[recent_dates > done - timedelta(days=interval_window_days)]
+    residual = (recent["actual"] - recent["forecast"]).groupby(level="hour")
+    hours = new.index.get_level_values("hour")
+    new["low"] = new["forecast"] + residual.quantile(INTERVAL_QUANTILES[0]).reindex(hours).to_numpy()
+    new["high"] = new["forecast"] + residual.quantile(INTERVAL_QUANTILES[1]).reindex(hours).to_numpy()
+
+    combined = pd.concat([predictions, new.reindex(columns=predictions.columns)])
+    combined_dates = combined.index.get_level_values("date")
+    return combined.loc[combined_dates > combined_dates.max() - timedelta(days=keep_days)]
 
 
 # ----------------------------------------------------------------------- forecast

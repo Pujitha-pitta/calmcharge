@@ -27,6 +27,8 @@ from src.day_ahead import (
     PRICE_CACHE,
     PRICE_COLUMN,
     REPORT_DIR,
+    SNAPSHOT_BACKTEST,
+    SNAPSHOT_PRICES,
     Backtest,
     daily_grid,
     forecast_next_day,
@@ -36,9 +38,6 @@ from src.day_ahead import (
 
 ROOT = Path(__file__).resolve().parent.parent
 PUBLIC_DIR = ROOT / "public"
-SNAPSHOT_DIR = ROOT / "data" / "snapshot"
-SNAPSHOT_PRICES = SNAPSHOT_DIR / "se4_prices.csv"
-SNAPSHOT_BACKTEST = SNAPSHOT_DIR / "day_ahead_backtest.csv"
 BACKTEST_CACHE = REPORT_DIR / "day_ahead_backtest.csv"
 PRICE_REFRESH_SECONDS = 60 * 60
 BACKTEST_DAYS = 365

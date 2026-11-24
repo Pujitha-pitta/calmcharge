@@ -2,8 +2,6 @@
 
 [![tests](https://github.com/Pujitha-pitta/calmcharge/actions/workflows/tests.yml/badge.svg)](https://github.com/Pujitha-pitta/calmcharge/actions/workflows/tests.yml)
 
-**Live app: [calmcharge.vercel.app](https://calmcharge.vercel.app)**
-
 I built CalmCharge as a hands-on project to follow electricity-price data from download through analysis and into a charging plan. It uses public data for Sweden's SE4 region. I don't have a vehicle, so the EV in the planner is a simulation with example battery settings.
 
 **Headline result:** over 364 real nights (25 Nov 2025 to 23 Nov 2026), charging a simulated EV with 15 kWh between 18:00 and 07:00 in the cheapest hours cut the energy cost by **45%** compared with plugging in and charging straight away. Planning at 11:00, *before* the next day's prices are published, using my day-ahead forecast still captured **90%** of that saving.
@@ -77,6 +75,8 @@ python -m src.web
 
 Open [http://127.0.0.1:8000](http://127.0.0.1:8000). The first start runs the year-long backtest (about a minute) and caches it. After that the app only downloads the newest prices. Change the battery, charger, plug-in and departure times, or add your own household tariff in SEK. The plan, the savings for the past year and the forecast update as you type. The JSON API is documented at `/api/docs`.
 
+The hosted version starts from the snapshot in `data/snapshot/`. Every afternoon, after the next day's prices are published, a GitHub Actions job (`.github/workflows/refresh-data.yml`) runs `python -m src.refresh_snapshot`. It appends the new prices and forecasts and commits them, which redeploys the app.
+
 The app never connects to or controls a real car or charger. Cost results are estimates based on the values you enter, and fixed monthly charges are excluded.
 
 ## Earlier experiments
@@ -93,7 +93,6 @@ The step from a one-hour-ahead model to a true day-ahead one taught me the most.
 
 - Add archived weather forecasts (wind and temperature drive SE4 prices) as issued at the forecast cutoff.
 - Calibrate the forecast ranges so 80% ranges hold the price 80% of the time.
-- Refresh the committed data snapshot daily with a scheduled job.
 - Check the cost calculation against a real electricity bill.
 
 ## Data sources
@@ -111,6 +110,8 @@ src/backtest_savings.py    Year-long savings simulation of four charging strateg
 src/web.py                 FastAPI backend for the web app
 public/                    Frontend: index.html, style.css, app.js (served by the CDN on Vercel)
 data/snapshot/             Committed price and backtest snapshot so the hosted app starts fast
+src/refresh_snapshot.py    Daily append-only update of that snapshot (run by GitHub Actions)
+index.html                 GitHub Pages landing page with the live app link
 src/explore.py             Exploratory charts
 src/train_model.py         Earlier one-hour-ahead ridge model
 src/validate_model.py      Expanding-window validation of that model

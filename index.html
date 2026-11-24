@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CalmCharge</title>
+  <meta name="description" content="CalmCharge plans EV charging in the cheapest hours of Sweden's SE4 electricity market, with a day-ahead price forecast.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230F1B33'/><path d='M18 4 9 18h6l-2 10 10-15h-6z' fill='%23F2A93B'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;600;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --night: #0f1b33;
+      --line: #2a3b63;
+      --frost: #e2e8f4;
+      --mist: #93a3c2;
+      --lamp: #f2a93b;
+      color-scheme: dark;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 48px clamp(16px, 6vw, 96px);
+      background: var(--night);
+      color: var(--frost);
+      font: 400 1.0625rem/1.6 "Schibsted Grotesk", system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    main { max-width: 760px; }
+    .mark { display: inline-flex; align-items: center; gap: 10px; font-weight: 600; font-size: 1.25rem; }
+    .mark svg { width: 24px; height: 24px; fill: var(--lamp); }
+    h1 {
+      margin: 28px 0 0;
+      font-size: clamp(2.3rem, 1.4rem + 4vw, 4.2rem);
+      font-weight: 800;
+      line-height: 1.02;
+      letter-spacing: -0.035em;
+      max-width: 16ch;
+    }
+    p.lede { margin: 20px 0 0; max-width: 58ch; font-size: 1.2rem; }
+    .open {
+      display: inline-block;
+      margin-top: 36px;
+      padding: 16px 26px;
+      border-radius: 12px;
+      background: var(--lamp);
+      color: var(--night);
+      font-weight: 800;
+      font-size: 1.15rem;
+      text-decoration: none;
+    }
+    .open:hover { background: #f6bb5f; }
+    .url { display: block; margin-top: 10px; color: var(--mist); font-size: 0.95rem; }
+    :focus-visible { outline: 2px solid var(--lamp); outline-offset: 3px; }
+    .facts { margin: 48px 0 0; padding: 24px 0 0; border-top: 1px solid var(--line); display: grid; gap: 14px; max-width: 62ch; }
+    .facts p { margin: 0; color: var(--mist); }
+    .facts strong { color: var(--frost); font-weight: 600; }
+    footer { margin-top: 36px; color: var(--mist); font-size: 0.92rem; }
+    footer a { color: var(--frost); text-underline-offset: 3px; text-decoration-color: var(--mist); }
+  </style>
+</head>
+<body>
+  <main>
+    <span class="mark">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M18 4 9 18h6l-2 10 10-15h-6z"/></svg>
+      CalmCharge
+    </span>
+    <h1>Charge your EV in the cheapest hours of the night.</h1>
+    <p class="lede">CalmCharge reads Sweden's SE4 day-ahead electricity prices, forecasts the hours that aren't published yet, and tells you when to charge.</p>
+
+    <a class="open" href="https://calmcharge.vercel.app">Open the live app</a>
+    <span class="url">calmcharge.vercel.app</span>
+
+    <div class="facts">
+      <p><strong>45% lower energy cost</strong> over a year of simulated overnight charging, compared with plugging in and charging straight away.</p>
+      <p><strong>26% smaller forecast error</strong> than assuming yesterday's prices repeat, tested day by day over 365 days.</p>
+      <p>The car is a simulation. Nothing in the app controls a real vehicle or charger.</p>
+    </div>
+  </main>
+  <footer>
+    <a href="https://github.com/Pujitha-pitta/calmcharge">Source code and method on GitHub</a>
+  </footer>
+</body>
+</html>
