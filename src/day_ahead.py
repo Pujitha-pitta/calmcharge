@@ -22,13 +22,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from dataclasses import dataclass
 from datetime import timedelta
+from functools import lru_cache
 from pathlib import Path
 
 import holidays
 import numpy as np
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 LOCAL_TIMEZONE = "Europe/Stockholm"
 DATA_PATH = Path("data/processed/se4_hourly.parquet")
@@ -50,6 +54,9 @@ PRICE_CACHE = Path("data/processed/se4_prices.csv")
 SNAPSHOT_DIR = Path(__file__).resolve().parent.parent / "data" / "snapshot"
 SNAPSHOT_PRICES = SNAPSHOT_DIR / "se4_prices.csv"
 SNAPSHOT_BACKTEST = SNAPSHOT_DIR / "day_ahead_backtest.csv"
+# Tomorrow's forecast, made by the daily refresh job with the best model. The hosted
+# app serves it as-is, so it gets the LightGBM forecast even where LightGBM can't load.
+SNAPSHOT_FORECAST = SNAPSHOT_DIR / "next_day_forecast.csv"
 
 
 def load_prices(path: Path = DATA_PATH, cache: Path = PRICE_CACHE) -> pd.Series:
@@ -237,10 +244,12 @@ class LightGBMForecaster:
         return self.booster.predict(features[self.columns].astype(float))
 
 
+@lru_cache(maxsize=1)
 def lightgbm_available() -> bool:
     try:
         import lightgbm  # noqa: F401
-    except Exception:  # missing or blocked compiled library
+    except Exception as exc:  # missing package, or its compiled library can't load
+        logger.warning("LightGBM unavailable, using ridge regression instead: %s", exc)
         return False
     return True
 
@@ -448,6 +457,25 @@ def forecast_next_day(
         index=stamps,
     )
     result.attrs["model"] = key
+    return result
+
+
+def save_forecast(forecast: pd.DataFrame, path: Path = SNAPSHOT_FORECAST) -> None:
+    """Write a forecast_next_day result, keeping the model name and the UTC offsets."""
+    frame = forecast.assign(model=forecast.attrs["model"])
+    frame.index = frame.index.map(lambda stamp: stamp.isoformat())
+    frame.to_csv(path, index_label="time")
+
+
+def load_forecast(path: Path = SNAPSHOT_FORECAST) -> pd.DataFrame | None:
+    """Read a forecast written by save_forecast, or None if there isn't one."""
+    if not path.exists():
+        return None
+    frame = pd.read_csv(path, float_precision="round_trip")
+    index = pd.to_datetime(frame.pop("time"), utc=True).dt.tz_convert(LOCAL_TIMEZONE)
+    frame.index = pd.DatetimeIndex(index, name="time")
+    result = frame[["forecast", "low", "high"]]
+    result.attrs["model"] = str(frame["model"].iloc[0])
     return result
 
 

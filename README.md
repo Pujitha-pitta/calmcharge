@@ -75,7 +75,7 @@ python -m src.web
 
 Open [http://127.0.0.1:8000](http://127.0.0.1:8000). The first start runs the year-long backtest (about a minute) and caches it. After that the app only downloads the newest prices. Change the battery, charger, plug-in and departure times, or add your own household tariff in SEK. The plan, the savings for the past year and the forecast update as you type. The JSON API is documented at `/api/docs`.
 
-The hosted version starts from the snapshot in `data/snapshot/`. Every afternoon, after the next day's prices are published, a GitHub Actions job (`.github/workflows/refresh-data.yml`) runs `python -m src.refresh_snapshot`. It appends the new prices and forecasts and commits them, which redeploys the app.
+The hosted version starts from the snapshot in `data/snapshot/`. Every afternoon, after the next day's prices are published, a GitHub Actions job (`.github/workflows/refresh-data.yml`) runs `python -m src.refresh_snapshot`. It appends the new prices and forecasts, saves tomorrow's forecast from the best model (`data/snapshot/next_day_forecast.csv`), and commits them, which redeploys the app. LightGBM's compiled library can't load in Vercel's Python runtime, so the hosted app serves that saved LightGBM forecast. It falls back to ridge regression only if the saved forecast is out of date.
 
 The app never connects to or controls a real car or charger. Cost results are estimates based on the values you enter, and fixed monthly charges are excluded.
 

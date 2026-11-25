@@ -5,7 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src import web
-from src.day_ahead import daily_grid
+from src.day_ahead import daily_grid, forecast_next_day, load_forecast, save_forecast
 from tests.test_forecast_and_charging import synthetic_prices
 
 
@@ -16,6 +16,7 @@ def client(monkeypatch, tmp_path):
     monkeypatch.setattr(web, "BACKTEST_CACHE", tmp_path / "backtest.csv")
     monkeypatch.setattr(web, "BACKTEST_DAYS", 30)
     monkeypatch.setattr(web, "store", web.Store())
+    monkeypatch.setattr(web, "load_forecast", lambda: None)  # ignore the committed snapshot
     return TestClient(web.app), prices
 
 
@@ -57,3 +58,41 @@ def test_homepage_is_served(client):
     page = api.get("/")
     assert page.status_code == 200
     assert "CalmCharge" in page.text
+
+
+def test_saved_forecast_round_trips_on_a_daylight_saving_day(tmp_path):
+    prices = synthetic_prices(days=120, start="2026-01-01")
+    prices = prices[prices.index < pd.Timestamp("2026-03-28 23:00", tz="UTC")]  # next day is 29 March, 23 hours
+    forecast = forecast_next_day(prices)
+    assert len(forecast) == 23
+    path = tmp_path / "forecast.csv"
+    save_forecast(forecast, path)
+    loaded = load_forecast(path)
+    pd.testing.assert_frame_equal(loaded, forecast, check_freq=False)
+    assert loaded.attrs["model"] == forecast.attrs["model"]
+    assert load_forecast(tmp_path / "missing.csv") is None
+
+
+def test_app_serves_the_saved_forecast_only_when_it_is_current(client, monkeypatch):
+    api, prices = client
+    real = forecast_next_day(prices)
+    saved = real.assign(forecast=1.0, low=0.5, high=1.5)  # recognisable values
+    saved.attrs["model"] = "ridge"
+    target = daily_grid(prices).dropna().index.max() + pd.Timedelta(days=1)
+
+    monkeypatch.setattr(web, "load_forecast", lambda: saved)
+    assert web._saved_forecast(target, "ridge") is saved
+    assert web._saved_forecast(target, "lightgbm") is None  # made by another model
+    assert web._saved_forecast(target - pd.Timedelta(days=1), "ridge") is None  # stale
+
+    monkeypatch.setattr(web, "store", web.Store())
+    monkeypatch.setattr(web, "_cached_backtest", lambda last: web.Backtest(predictions=_tiny_backtest(prices), model_key="ridge"))
+    body = api.get("/api/forecast").json()
+    assert {h["forecast"] for h in body["hours"]} == {1.0}
+
+
+def _tiny_backtest(prices):
+    from src.day_ahead import walk_forward
+
+    grid = daily_grid(prices)
+    return walk_forward(grid, grid.dropna().index.max() - pd.Timedelta(days=20)).predictions

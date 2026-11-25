@@ -32,6 +32,7 @@ from src.day_ahead import (
     Backtest,
     daily_grid,
     forecast_next_day,
+    load_forecast,
     load_prices,
     walk_forward,
 )
@@ -78,8 +79,25 @@ class Store:
                 pass
         self.prices = prices
         self.backtest = backtest
-        self.forecast = forecast_next_day(prices, backtest)
+        self.forecast = _saved_forecast(last_complete + timedelta(days=1), backtest.model_key)
+        if self.forecast is None:
+            self.forecast = forecast_next_day(prices, backtest)
         self.loaded_at = clock.time()
+
+
+def _saved_forecast(target: pd.Timestamp, model_key: str) -> pd.DataFrame | None:
+    """The refresh job's forecast, if it is for ``target`` and made with the best model.
+
+    On Vercel LightGBM can't load, so this is how the hosted app serves the
+    LightGBM forecast. Anything stale or from another model is ignored.
+    """
+    try:
+        saved = load_forecast()
+    except (OSError, ValueError, KeyError):
+        return None
+    if saved is None or saved.empty or saved.attrs["model"] != model_key:
+        return None
+    return saved if saved.index[0].date() == pd.Timestamp(target).date() else None
 
 
 def _load_and_top_up_prices() -> pd.Series:
